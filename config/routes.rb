@@ -1,9 +1,4 @@
 Rails.application.routes.draw do
-  # If you no longer want HTML endpoints, remove or comment out the old lines
-  # resources :appointments
-  # resources :dependents
-  # etc.
-
   namespace :api do
     namespace :v1 do
       post '/login', to: 'sessions#create'
