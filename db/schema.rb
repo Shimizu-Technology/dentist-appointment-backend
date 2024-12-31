@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_12_31_152900) do
+ActiveRecord::Schema[7.2].define(version: 2024_12_31_161546) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -63,6 +63,7 @@ ActiveRecord::Schema[7.2].define(version: 2024_12_31_152900) do
     t.string "provider_name"
     t.string "policy_number"
     t.string "plan_type"
+    t.string "phone"
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 
