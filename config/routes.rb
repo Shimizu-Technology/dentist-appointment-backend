@@ -1,3 +1,4 @@
+# config/routes.rb
 Rails.application.routes.draw do
   namespace :api do
     namespace :v1 do
@@ -6,7 +7,7 @@ Rails.application.routes.draw do
       resources :dependents, only: [:index, :create, :update, :destroy]
       resources :appointment_types
       resources :dentists, only: [:index, :show]
-      # Possibly a Users controller if needed
+      resources :users, only: [:create]
     end
   end
 end
