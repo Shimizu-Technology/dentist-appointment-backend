@@ -7,8 +7,6 @@ gem "sprockets-rails"
 # Use postgresql as the database for Active Record
 gem "pg", "~> 1.1"
 
-gem 'devise'
-
 gem 'bcrypt', '~> 3.1.7'
 gem 'jwt', '~> 2.2'
 
