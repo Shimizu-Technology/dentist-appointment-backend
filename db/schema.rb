@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_12_31_113638) do
+ActiveRecord::Schema[7.2].define(version: 2024_12_31_113702) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -19,6 +19,21 @@ ActiveRecord::Schema[7.2].define(version: 2024_12_31_113638) do
     t.text "description"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+  end
+
+  create_table "appointments", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.bigint "dependent_id", null: false
+    t.bigint "dentist_id", null: false
+    t.bigint "appointment_type_id", null: false
+    t.datetime "appointment_time"
+    t.string "status"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["appointment_type_id"], name: "index_appointments_on_appointment_type_id"
+    t.index ["dentist_id"], name: "index_appointments_on_dentist_id"
+    t.index ["dependent_id"], name: "index_appointments_on_dependent_id"
+    t.index ["user_id"], name: "index_appointments_on_user_id"
   end
 
   create_table "dentists", force: :cascade do |t|
@@ -52,5 +67,9 @@ ActiveRecord::Schema[7.2].define(version: 2024_12_31_113638) do
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
 
+  add_foreign_key "appointments", "appointment_types"
+  add_foreign_key "appointments", "dentists"
+  add_foreign_key "appointments", "dependents"
+  add_foreign_key "appointments", "users"
   add_foreign_key "dependents", "users"
 end

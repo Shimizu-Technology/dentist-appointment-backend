@@ -1,0 +1,17 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  user: one
+  dependent: one
+  dentist: one
+  appointment_type: one
+  appointment_time: 2024-12-31 21:37:02
+  status: MyString
+
+two:
+  user: two
+  dependent: two
+  dentist: two
+  appointment_type: two
+  appointment_time: 2024-12-31 21:37:02
+  status: MyString
