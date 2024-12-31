@@ -14,7 +14,8 @@ admin_user = User.create!(
   role: "admin",
   provider_name: "Delta Dental",
   policy_number: "AAA111",
-  plan_type: "PPO"
+  plan_type: "PPO",
+  phone: "555-0001"          # Example admin phone number
 )
 
 parent_user = User.create!(
@@ -23,7 +24,8 @@ parent_user = User.create!(
   role: "user",
   provider_name: "Guardian",
   policy_number: "BBB222",
-  plan_type: "HMO"
+  plan_type: "HMO",
+  phone: "555-0002"          # Example parent phone number
 )
 
 puts "Creating Dependents..."
