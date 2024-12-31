@@ -1,3 +1,4 @@
+# app/controllers/api/v1/base_controller.rb
 module Api
   module V1
     class BaseController < ApplicationController
@@ -6,20 +7,17 @@ module Api
 
       before_action :authenticate_user!
 
-      # Override Devise's authenticate_user! with JWT logic for API calls
+      # Custom JWT-based authentication for API calls
       def authenticate_user!
-        # Attempt to parse the Authorization header
         header = request.headers['Authorization']
         token = header.split(' ').last if header.present?
-
-        # If no token, fall back to Devise or just deny
         return unauthenticated! unless token
 
         begin
           decoded = JWT.decode(token, Rails.application.credentials.secret_key_base).first
           @current_user = User.find(decoded['user_id'])
         rescue ActiveRecord::RecordNotFound, JWT::DecodeError
-          return unauthenticated!
+          unauthenticated!
         end
       end
 
