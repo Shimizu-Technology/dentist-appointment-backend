@@ -1,9 +1,18 @@
 Rails.application.routes.draw do
-  root to: "pages#home"
-  devise_for :users
+  # If you no longer want HTML endpoints, remove or comment out the old lines
+  # resources :appointments
+  # resources :dependents
+  # etc.
 
-  resources :appointments
-  resources :dependents
-  resources :appointment_types
-  resources :dentists, only: [:index, :show] # or full CRUD if admins can manage them
+  namespace :api do
+    namespace :v1 do
+      resources :appointments, only: [:index, :create, :show, :update, :destroy]
+      resources :dependents, only: [:index, :create, :update, :destroy]
+      resources :appointment_types
+      resources :dentists, only: [:index, :show]
+      # Possibly a Users controller if needed
+    end
+  end
+
+  # root "pages#home" or remove if purely API
 end
