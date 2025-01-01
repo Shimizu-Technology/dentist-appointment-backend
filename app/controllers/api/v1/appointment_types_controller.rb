@@ -4,19 +4,16 @@ module Api
     class AppointmentTypesController < BaseController
       skip_before_action :authenticate_user!, only: [:index, :show]
 
-      # GET /api/v1/appointment_types
       def index
         appointment_types = AppointmentType.all
         render json: appointment_types.map { |type| type_to_camel(type) }, status: :ok
       end
 
-      # GET /api/v1/appointment_types/:id
       def show
         type = AppointmentType.find(params[:id])
         render json: type_to_camel(type), status: :ok
       end
 
-      # POST /api/v1/appointment_types (admin only)
       def create
         return not_admin unless current_user.admin?
 
@@ -28,7 +25,6 @@ module Api
         end
       end
 
-      # PATCH/PUT /api/v1/appointment_types/:id (admin only)
       def update
         return not_admin unless current_user.admin?
 
@@ -40,7 +36,6 @@ module Api
         end
       end
 
-      # DELETE /api/v1/appointment_types/:id (admin only)
       def destroy
         return not_admin unless current_user.admin?
 
@@ -52,7 +47,8 @@ module Api
       private
 
       def appointment_type_params
-        params.require(:appointment_type).permit(:name, :description)
+        # Now includes :duration
+        params.require(:appointment_type).permit(:name, :description, :duration)
       end
 
       def not_admin
@@ -64,6 +60,7 @@ module Api
           id: type.id,
           name: type.name,
           description: type.description,
+          duration: type.duration,
           createdAt: type.created_at.iso8601,
           updatedAt: type.updated_at.iso8601
         }

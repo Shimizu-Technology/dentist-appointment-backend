@@ -1,14 +1,5 @@
 # db/seeds.rb
 
-puts "Cleaning existing records..."
-Appointment.destroy_all
-AppointmentType.destroy_all
-DentistAvailability.destroy_all
-Dentist.destroy_all
-Specialty.destroy_all
-Dependent.destroy_all
-User.destroy_all
-
 puts "Creating Users..."
 admin_user = User.create!(
   email: "admin@example.com",
