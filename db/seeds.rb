@@ -69,12 +69,42 @@ appointment_types = [cleaning_type, filling_type, checkup_type, whitening_type]
 dentists          = [dentist1, dentist2, dentist3]
 
 # -------------------------------------------------------------------
+# Guaranteed Admin user
+puts "Creating guaranteed admin@example.com account..."
+User.create!(
+  email: "admin@example.com",
+  password: "password",
+  role: "admin",
+  provider_name: "Delta Dental",
+  policy_number: "AAA111",
+  plan_type: "PPO",
+  phone: "555-0001",
+  first_name: "Adminy",
+  last_name: "Example"
+)
+
+# -------------------------------------------------------------------
+# Guaranteed Regular user
+puts "Creating guaranteed user@example.com account..."
+User.create!(
+  email: "user@example.com",
+  password: "password",
+  role: "user",
+  provider_name: "Guardian",
+  policy_number: "BBB222",
+  plan_type: "HMO",
+  phone: "555-0002",
+  first_name: "Regular",
+  last_name: "User"
+)
+
+# -------------------------------------------------------------------
 # Admin Users
-puts "Creating 10 Admin Users..."
+puts "Creating 10 Random Admin Users..."
 10.times do
   User.create!(
     email:       Faker::Internet.unique.email,
-    password:    "password",       # a default password
+    password:    "password",       # default password
     role:        "admin",
     provider_name: Faker::Company.name,
     policy_number: Faker::Alphanumeric.alpha(number: 5).upcase,
@@ -87,7 +117,7 @@ end
 
 # -------------------------------------------------------------------
 # Regular Users (Parents)
-puts "Creating 200 Regular Users..."
+puts "Creating 200 Random Regular Users..."
 users = []
 200.times do
   user = User.create!(
@@ -110,8 +140,8 @@ puts "Creating Dependents for each user..."
 users.each do |user|
   rand(2..4).times do
     user.dependents.create!(
-      first_name:  Faker::Name.first_name,
-      last_name:   user.last_name,  # or Faker::Name.last_name
+      first_name:    Faker::Name.first_name,
+      last_name:     user.last_name,  # or Faker::Name.last_name
       date_of_birth: Faker::Date.birthday(min_age: 1, max_age: 17)
     )
   end
@@ -120,7 +150,6 @@ end
 # -------------------------------------------------------------------
 # DentistAvailabilities for each dentist
 puts "Creating Dentist Availabilities..."
-# For example, Mon-Fri schedule (let's vary them a bit)
 # Dentist 1:
 DentistAvailability.create!(dentist: dentist1, day_of_week: 1, start_time: "09:00", end_time: "17:00") # Mon
 DentistAvailability.create!(dentist: dentist1, day_of_week: 2, start_time: "09:00", end_time: "17:00") # Tue
@@ -162,28 +191,23 @@ end
 status_options = %w[scheduled completed cancelled]
 
 users.each do |user|
-  # For the user's dependents (including the user as "nil" dependent):
-  # We'll create a random number of appointments (0..5)
-  # picking random dentist, random type, random time, random status
-  # Keep in mind if dependent is nil => means appointment is for user themself in your scenario
-  # (But your schema requires dependent to be NOT NULL => let's pass a random one from this user)
-  
-  # gather all dependents
+  # For each user, create a random number of appointments (0..5).
+  # We'll pick a random dependent, dentist, appointment_type, time, and status.
   user_dependents = user.dependents
   next if user_dependents.empty?
 
   rand(0..5).times do
-    apt_time = [true, false].sample ? random_future_time : random_past_time
+    apt_time   = [true, false].sample ? random_future_time : random_past_time
     apt_status = status_options.sample
 
     Appointment.create!(
-      user: user,
-      dependent: user_dependents.sample,
-      dentist: dentists.sample,
-      appointment_type: appointment_types.sample,
-      appointment_time: apt_time,
-      status: apt_status,
-      notes: Faker::Lorem.sentence(word_count: 6)
+      user:              user,
+      dependent:         user_dependents.sample,
+      dentist:           dentists.sample,
+      appointment_type:  appointment_types.sample,
+      appointment_time:  apt_time,
+      status:            apt_status,
+      notes:             Faker::Lorem.sentence(word_count: 6)
     )
   end
 end
@@ -199,4 +223,3 @@ puts " - AppointmentTypes: #{AppointmentType.count}"
 puts " - Appointments: #{Appointment.count}"
 puts " - DentistAvailabilities: #{DentistAvailability.count}"
 puts " - Specialties: #{Specialty.count}"
-
