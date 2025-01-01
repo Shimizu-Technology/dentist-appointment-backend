@@ -98,6 +98,7 @@ module Api
         {
           id: appt.id,
           userId: appt.user_id,
+          userName: appt.user ? "#{appt.user.first_name} #{appt.user.last_name}" : nil,
           dependentId: appt.dependent_id,
           dentistId: appt.dentist_id,
           appointmentTypeId: appt.appointment_type_id,
