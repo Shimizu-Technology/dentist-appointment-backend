@@ -29,7 +29,6 @@ This README provides setup instructions, usage examples, and endpoint documentat
 7. [Environment Variables](#environment-variables)  
 8. [Deployment](#deployment)  
 9. [Future Enhancements / Next Steps](#future-enhancements--next-steps)  
-10. [License](#license)
 
 ---
 
