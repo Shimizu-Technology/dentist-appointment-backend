@@ -29,17 +29,13 @@ parent_user = User.create!(
 )
 
 puts "Creating Dependents..."
-# Note: Our schema enforces `null: false` for dependent_id in Appointments,
-# so even an adult user needs a dependent record if they want an appointment.
+# Because of `null: false` constraint on :dependent_id, each user needs at least one Dependent record.
 child_dependent = parent_user.dependents.create!(
   first_name: "Sally",
   last_name: "Child",
   date_of_birth: "2012-05-01"
 )
 
-# This second dependent can represent the parent, or another child.
-# Because of the null: false constraint, the parent needs a dependent record
-# if we want to create an appointment for them specifically.
 parent_dependent = parent_user.dependents.create!(
   first_name: "ParentAsDependent",
   last_name: "Example",
@@ -47,16 +43,17 @@ parent_dependent = parent_user.dependents.create!(
 )
 
 puts "Creating Dentists..."
+# Updated specialty to match front-end usage: "general" or "pediatric"
 dentist_adult = Dentist.create!(
   first_name: "Jane",
   last_name: "Doe",
-  specialty: "Adult Dentistry"
+  specialty: "general"
 )
 
 dentist_pediatric = Dentist.create!(
   first_name: "Joe",
   last_name: "Kiddo",
-  specialty: "Pediatric Dentistry"
+  specialty: "pediatric"
 )
 
 puts "Creating Appointment Types..."
@@ -76,17 +73,15 @@ checkup_type = AppointmentType.create!(
 )
 
 puts "Creating Appointments..."
-# Appointment for the child's dependent record
 Appointment.create!(
   user: parent_user,
   dependent: child_dependent,
   dentist: dentist_adult,
   appointment_type: cleaning_type,
-  appointment_time: Time.current + 1.week, # One week from now
+  appointment_time: Time.current + 1.week,
   status: "scheduled"
 )
 
-# Appointment for the parent's "dependent" record
 Appointment.create!(
   user: parent_user,
   dependent: parent_dependent,
@@ -100,6 +95,6 @@ puts "Seeding complete!"
 puts "Created:"
 puts " - 1 Admin User (admin@example.com / password)"
 puts " - 1 Regular User (parent@example.com / password) with 2 dependents"
-puts " - 2 Dentists (Adult / Pediatric)"
+puts " - 2 Dentists (general / pediatric)"
 puts " - 3 Appointment Types (Cleaning, Filling, Checkup)"
 puts " - 2 Appointments (one for each dependent)"

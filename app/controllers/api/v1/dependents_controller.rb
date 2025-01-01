@@ -1,19 +1,18 @@
-# frozen_string_literal: true
-
+# app/controllers/api/v1/dependents_controller.rb
 module Api
   module V1
     class DependentsController < BaseController
       # GET /api/v1/dependents
       def index
         if current_user.admin?
-          # Admin can see all
+          # Admin sees all dependents
           dependents = Dependent.all
         else
           # Regular user sees only their own
           dependents = current_user.dependents
         end
 
-        render json: dependents, status: :ok
+        render json: dependents.map { |dep| dependent_to_camel(dep) }, status: :ok
       end
 
       # POST /api/v1/dependents
@@ -21,7 +20,7 @@ module Api
         dependent = current_user.dependents.new(dependent_params)
 
         if dependent.save
-          render json: dependent, status: :created
+          render json: dependent_to_camel(dependent), status: :created
         else
           render json: { errors: dependent.errors.full_messages }, status: :unprocessable_entity
         end
@@ -32,7 +31,7 @@ module Api
         dependent = Dependent.find(params[:id])
         return not_authorized unless can_manage_dependent?(dependent)
 
-        render json: dependent, status: :ok
+        render json: dependent_to_camel(dependent), status: :ok
       end
 
       # PATCH/PUT /api/v1/dependents/:id
@@ -41,7 +40,7 @@ module Api
         return not_authorized unless can_manage_dependent?(dependent)
 
         if dependent.update(dependent_params)
-          render json: dependent, status: :ok
+          render json: dependent_to_camel(dependent), status: :ok
         else
           render json: { errors: dependent.errors.full_messages }, status: :unprocessable_entity
         end
@@ -68,6 +67,18 @@ module Api
 
       def not_authorized
         render json: { error: "Not authorized" }, status: :forbidden
+      end
+
+      def dependent_to_camel(dep)
+        {
+          id: dep.id,
+          userId: dep.user_id,
+          firstName: dep.first_name,
+          lastName: dep.last_name,
+          dateOfBirth: dep.date_of_birth&.strftime('%Y-%m-%d'),
+          createdAt: dep.created_at.iso8601,
+          updatedAt: dep.updated_at.iso8601
+        }
       end
     end
   end
