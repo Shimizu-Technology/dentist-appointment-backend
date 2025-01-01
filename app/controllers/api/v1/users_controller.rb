@@ -18,6 +18,8 @@ module Api
       private
 
       def user_params
+        # Permit the fields you need (including first_name, last_name, etc.)
+        # Then force 'role' to 'user' with .merge(role: 'user')
         params.require(:user).permit(
           :email,
           :password,
@@ -25,10 +27,9 @@ module Api
           :provider_name,
           :policy_number,
           :plan_type,
-          # If you store first_name/last_name in the DB, you can add them here:
-          # :first_name,
-          # :last_name
-        )
+          :first_name,
+          :last_name
+        ).merge(role: 'user')
       end
 
       def user_to_camel(u)
