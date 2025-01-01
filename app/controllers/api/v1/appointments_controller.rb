@@ -4,14 +4,30 @@ module Api
     class AppointmentsController < BaseController
       # GET /api/v1/appointments
       def index
+        # 1) Different base scope for admin vs non-admin
         if current_user.admin?
-          @appointments = Appointment.includes(:dentist, :appointment_type).all
+          base_scope = Appointment.includes(:dentist, :appointment_type, :user)
         else
-          @appointments = Appointment.includes(:dentist, :appointment_type)
-                                     .where(user_id: current_user.id)
+          base_scope = Appointment.includes(:dentist, :appointment_type, :user)
+                                   .where(user_id: current_user.id)
         end
 
-        render json: @appointments.map { |appt| appointment_to_camel(appt) }, status: :ok
+        # 2) Parse pagination params
+        page     = (params[:page].presence || 1).to_i
+        per_page = (params[:per_page].presence || 10).to_i
+
+        # 3) Apply Kaminari pagination
+        @appointments = base_scope.order(id: :desc).page(page).per(per_page)
+
+        render json: {
+          appointments: @appointments.map { |appt| appointment_to_camel(appt) },
+          meta: {
+            currentPage:   @appointments.current_page,
+            totalPages:    @appointments.total_pages,
+            totalCount:    @appointments.total_count,
+            perPage:       per_page
+          }
+        }, status: :ok
       end
 
       # POST /api/v1/appointments
@@ -96,27 +112,27 @@ module Api
 
       def appointment_to_camel(appt)
         {
-          id: appt.id,
-          userId: appt.user_id,
-          userName: appt.user ? "#{appt.user.first_name} #{appt.user.last_name}" : nil,
-          userEmail: appt.user ? appt.user.email : nil,
-          dependentId: appt.dependent_id,
-          dentistId: appt.dentist_id,
-          appointmentTypeId: appt.appointment_type_id,
-          appointmentTime: appt.appointment_time&.iso8601,
-          status: appt.status,
-          createdAt: appt.created_at.iso8601,
-          updatedAt: appt.updated_at.iso8601,
-          notes: appt.notes,
+          id:                 appt.id,
+          userId:             appt.user_id,
+          userName:           appt.user ? "#{appt.user.first_name} #{appt.user.last_name}" : nil,
+          userEmail:          appt.user ? appt.user.email : nil,
+          dependentId:        appt.dependent_id,
+          dentistId:          appt.dentist_id,
+          appointmentTypeId:  appt.appointment_type_id,
+          appointmentTime:    appt.appointment_time&.iso8601,
+          status:             appt.status,
+          createdAt:          appt.created_at.iso8601,
+          updatedAt:          appt.updated_at.iso8601,
+          notes:              appt.notes,
           dentist: appt.dentist && {
-            id: appt.dentist.id,
-            firstName: appt.dentist.first_name,
-            lastName: appt.dentist.last_name,
-            specialty: appt.dentist.specialty
+            id:         appt.dentist.id,
+            firstName:  appt.dentist.first_name,
+            lastName:   appt.dentist.last_name,
+            specialty:  appt.dentist.specialty
           },
           appointmentType: appt.appointment_type && {
-            id: appt.appointment_type.id,
-            name: appt.appointment_type.name,
+            id:          appt.appointment_type.id,
+            name:        appt.appointment_type.name,
             description: appt.appointment_type.description
           }
         }
