@@ -97,7 +97,7 @@ module Api
           #   name: d.specialty.name
           # },
           imageUrl: d.image_url,
-          qualifications: d.qualifications,
+          qualifications: d.qualifications ? d.qualifications.split("\n") : [],
           createdAt: d.created_at.iso8601,
           updatedAt: d.updated_at.iso8601
         }
