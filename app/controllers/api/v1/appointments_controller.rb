@@ -84,15 +84,13 @@ module Api
       private
 
       def appointment_params
-        # ADDED :notes and :appointment_date
         params.require(:appointment).permit(
           :appointment_time,
           :appointment_type_id,
           :dentist_id,
           :status,
           :dependent_id,
-          :notes,              # NEW
-          :appointment_date    # NEW
+          :notes
         )
       end
 
