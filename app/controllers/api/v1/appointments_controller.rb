@@ -84,11 +84,18 @@ module Api
       private
 
       def appointment_params
-        params.require(:appointment).permit(:appointment_time, :appointment_type_id,
-                                           :dentist_id, :status, :dependent_id)
+        # ADDED :notes and :appointment_date
+        params.require(:appointment).permit(
+          :appointment_time,
+          :appointment_type_id,
+          :dentist_id,
+          :status,
+          :dependent_id,
+          :notes,              # NEW
+          :appointment_date    # NEW
+        )
       end
 
-      # Convert a single Appointment record to camelCase JSON structure
       def appointment_to_camel(appt)
         {
           id: appt.id,
@@ -100,6 +107,7 @@ module Api
           status: appt.status,
           createdAt: appt.created_at.iso8601,
           updatedAt: appt.updated_at.iso8601,
+          notes: appt.notes,
           dentist: appt.dentist && {
             id: appt.dentist.id,
             firstName: appt.dentist.first_name,

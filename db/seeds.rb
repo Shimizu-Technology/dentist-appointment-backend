@@ -99,15 +99,15 @@ Appointment.create!(
 )
 
 puts "Creating Dentist Availabilities..."
-DentistAvailability.create!(dentist: dentist_adult, day_of_week: 1, start_time: "09:00", end_time: "17:00") # Monday
-DentistAvailability.create!(dentist: dentist_adult, day_of_week: 2, start_time: "09:00", end_time: "17:00") # Tuesday
+DentistAvailability.create!(dentist: dentist_adult, day_of_week: 1, start_time: "09:00", end_time: "17:00") # Mon
+DentistAvailability.create!(dentist: dentist_adult, day_of_week: 2, start_time: "09:00", end_time: "17:00") # Tue
 DentistAvailability.create!(dentist: dentist_adult, day_of_week: 3, start_time: "09:00", end_time: "17:00") # Wed
-DentistAvailability.create!(dentist: dentist_adult, day_of_week: 4, start_time: "09:00", end_time: "17:00") # Thur
+DentistAvailability.create!(dentist: dentist_adult, day_of_week: 4, start_time: "09:00", end_time: "17:00") # Thu
 DentistAvailability.create!(dentist: dentist_adult, day_of_week: 5, start_time: "09:00", end_time: "15:00") # Fri
 
-DentistAvailability.create!(dentist: dentist_pediatric, day_of_week: 1, start_time: "10:00", end_time: "18:00") # Monday
-DentistAvailability.create!(dentist: dentist_pediatric, day_of_week: 2, start_time: "10:00", end_time: "18:00") # Tuesday
-DentistAvailability.create!(dentist: dentist_pediatric, day_of_week: 4, start_time: "10:00", end_time: "18:00") # Thurs
+DentistAvailability.create!(dentist: dentist_pediatric, day_of_week: 1, start_time: "10:00", end_time: "18:00") # Mon
+DentistAvailability.create!(dentist: dentist_pediatric, day_of_week: 2, start_time: "10:00", end_time: "18:00") # Tue
+DentistAvailability.create!(dentist: dentist_pediatric, day_of_week: 4, start_time: "10:00", end_time: "18:00") # Thu
 DentistAvailability.create!(dentist: dentist_pediatric, day_of_week: 5, start_time: "10:00", end_time: "16:00") # Fri
 
 puts "Seeding complete!"
