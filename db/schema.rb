@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_12_31_161546) do
+ActiveRecord::Schema[7.2].define(version: 2025_01_01_071534) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -34,6 +34,16 @@ ActiveRecord::Schema[7.2].define(version: 2024_12_31_161546) do
     t.index ["dentist_id"], name: "index_appointments_on_dentist_id"
     t.index ["dependent_id"], name: "index_appointments_on_dependent_id"
     t.index ["user_id"], name: "index_appointments_on_user_id"
+  end
+
+  create_table "dentist_availabilities", force: :cascade do |t|
+    t.bigint "dentist_id", null: false
+    t.integer "day_of_week", null: false
+    t.string "start_time", null: false
+    t.string "end_time", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["dentist_id"], name: "index_dentist_availabilities_on_dentist_id"
   end
 
   create_table "dentists", force: :cascade do |t|
@@ -64,6 +74,8 @@ ActiveRecord::Schema[7.2].define(version: 2024_12_31_161546) do
     t.string "policy_number"
     t.string "plan_type"
     t.string "phone"
+    t.string "first_name"
+    t.string "last_name"
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 
@@ -71,5 +83,6 @@ ActiveRecord::Schema[7.2].define(version: 2024_12_31_161546) do
   add_foreign_key "appointments", "dentists"
   add_foreign_key "appointments", "dependents"
   add_foreign_key "appointments", "users"
+  add_foreign_key "dentist_availabilities", "dentists"
   add_foreign_key "dependents", "users"
 end

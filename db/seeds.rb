@@ -3,6 +3,7 @@
 puts "Cleaning existing records..."
 Appointment.destroy_all
 AppointmentType.destroy_all
+DentistAvailability.destroy_all
 Dentist.destroy_all
 Dependent.destroy_all
 User.destroy_all
@@ -10,12 +11,14 @@ User.destroy_all
 puts "Creating Users..."
 admin_user = User.create!(
   email: "admin@example.com",
-  password: "password",      # Hashed automatically via has_secure_password
+  password: "password",
   role: "admin",
   provider_name: "Delta Dental",
   policy_number: "AAA111",
   plan_type: "PPO",
-  phone: "555-0001"          # Example admin phone number
+  phone: "555-0001",
+  first_name: "Admin",
+  last_name: "User"
 )
 
 parent_user = User.create!(
@@ -25,11 +28,12 @@ parent_user = User.create!(
   provider_name: "Guardian",
   policy_number: "BBB222",
   plan_type: "HMO",
-  phone: "555-0002"          # Example parent phone number
+  phone: "555-0002",
+  first_name: "John",
+  last_name: "Parent"
 )
 
 puts "Creating Dependents..."
-# Because of `null: false` constraint on :dependent_id, each user needs at least one Dependent record.
 child_dependent = parent_user.dependents.create!(
   first_name: "Sally",
   last_name: "Child",
@@ -43,17 +47,16 @@ parent_dependent = parent_user.dependents.create!(
 )
 
 puts "Creating Dentists..."
-# Updated specialty to match front-end usage: "general" or "pediatric"
 dentist_adult = Dentist.create!(
   first_name: "Jane",
   last_name: "Doe",
-  specialty: "general"
+  specialty: "Adult Dentistry"
 )
 
 dentist_pediatric = Dentist.create!(
   first_name: "Joe",
   last_name: "Kiddo",
-  specialty: "pediatric"
+  specialty: "Pediatric Dentistry"
 )
 
 puts "Creating Appointment Types..."
@@ -91,10 +94,23 @@ Appointment.create!(
   status: "scheduled"
 )
 
+puts "Creating Dentist Availabilities..."
+DentistAvailability.create!(dentist: dentist_adult,    day_of_week: 1, start_time: "09:00", end_time: "17:00")
+DentistAvailability.create!(dentist: dentist_adult,    day_of_week: 2, start_time: "09:00", end_time: "17:00")
+DentistAvailability.create!(dentist: dentist_adult,    day_of_week: 3, start_time: "09:00", end_time: "17:00")
+DentistAvailability.create!(dentist: dentist_adult,    day_of_week: 4, start_time: "09:00", end_time: "17:00")
+DentistAvailability.create!(dentist: dentist_adult,    day_of_week: 5, start_time: "09:00", end_time: "15:00")
+
+DentistAvailability.create!(dentist: dentist_pediatric, day_of_week: 1, start_time: "10:00", end_time: "18:00")
+DentistAvailability.create!(dentist: dentist_pediatric, day_of_week: 2, start_time: "10:00", end_time: "18:00")
+DentistAvailability.create!(dentist: dentist_pediatric, day_of_week: 4, start_time: "10:00", end_time: "18:00")
+DentistAvailability.create!(dentist: dentist_pediatric, day_of_week: 5, start_time: "10:00", end_time: "16:00")
+
 puts "Seeding complete!"
 puts "Created:"
 puts " - 1 Admin User (admin@example.com / password)"
 puts " - 1 Regular User (parent@example.com / password) with 2 dependents"
-puts " - 2 Dentists (general / pediatric)"
+puts " - 2 Dentists (Adult / Pediatric)"
 puts " - 3 Appointment Types (Cleaning, Filling, Checkup)"
-puts " - 2 Appointments (one for each dependent)"
+puts " - 2 Appointments"
+puts " - DentistAvailability (Schedules) for each dentist"
