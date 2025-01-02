@@ -15,8 +15,24 @@ module Api
         end
       end
 
+      # PATCH /api/v1/users/current
+      # Updates the current user’s profile (first_name, last_name, phone, email).
+      def current
+        unless @current_user  # from BaseController#authenticate_user!
+          render json: { error: 'Unauthorized' }, status: :unauthorized
+          return
+        end
+
+        if @current_user.update(user_update_params)
+          render json: user_to_camel(@current_user), status: :ok
+        else
+          render json: { errors: @current_user.errors.full_messages }, status: :unprocessable_entity
+        end
+      end
+
       private
 
+      # Used when creating a new user (signup).
       def user_params
         # Permit the fields you need (including first_name, last_name, etc.)
         # Then force 'role' to 'user' with .merge(role: 'user')
@@ -30,6 +46,12 @@ module Api
           :first_name,
           :last_name
         ).merge(role: 'user')
+      end
+
+      # Used when updating an existing user
+      def user_update_params
+        # Let the user update these fields:
+        params.require(:user).permit(:first_name, :last_name, :phone, :email)
       end
 
       def user_to_camel(u)

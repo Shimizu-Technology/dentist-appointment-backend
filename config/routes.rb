@@ -1,3 +1,4 @@
+# config/routes.rb
 Rails.application.routes.draw do
   namespace :api do
     namespace :v1 do
@@ -5,11 +6,15 @@ Rails.application.routes.draw do
       resources :appointments, only: [:index, :create, :show, :update, :destroy]
       resources :dependents, only: [:index, :create, :update, :destroy]
       resources :appointment_types
-      resources :users, only: [:create]
       resources :dentists, only: [:index, :show] do
         get :availabilities, on: :member
       end
       resources :specialties
+      resources :users, only: [:create] do
+        collection do
+          patch :current
+        end
+      end
     end
   end
 end
