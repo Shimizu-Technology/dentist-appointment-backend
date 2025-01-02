@@ -1,11 +1,22 @@
 # app/controllers/api/v1/users_controller.rb
+
 module Api
   module V1
     class UsersController < BaseController
       skip_before_action :authenticate_user!, only: [:create]
 
+      # GET /api/v1/users
+      # Admin-only: list all users
+      def index
+        return not_admin unless current_user.admin?
+
+        users = User.all.order(:id)
+        render json: users.map { |u| user_to_camel(u) }, status: :ok
+      end
+
+      # POST /api/v1/users
       def create
-        user = User.new(user_params)
+        user = User.new(user_params_for_create)
 
         if user.save
           token = JWT.encode({ user_id: user.id }, Rails.application.credentials.secret_key_base)
@@ -18,7 +29,7 @@ module Api
       # PATCH /api/v1/users/current
       # Updates the current user’s profile (first_name, last_name, phone, email).
       def current
-        unless @current_user  # from BaseController#authenticate_user!
+        unless @current_user
           render json: { error: 'Unauthorized' }, status: :unauthorized
           return
         end
@@ -30,27 +41,39 @@ module Api
         end
       end
 
-      private
+      # PATCH /api/v1/users/:id/promote
+      # Admin-only: change a user’s role to "admin"
+      def promote
+        return not_admin unless current_user.admin?
 
-      # Used when creating a new user (signup).
-      def user_params
-        # Permit the fields you need (including first_name, last_name, etc.)
-        # Then force 'role' to 'user' with .merge(role: 'user')
-        params.require(:user).permit(
-          :email,
-          :password,
-          :phone,
-          :provider_name,
-          :policy_number,
-          :plan_type,
-          :first_name,
-          :last_name
-        ).merge(role: 'user')
+        user = User.find(params[:id])
+        # Optionally, check if user.role is already "admin"
+        if user.update(role: 'admin')
+          render json: user_to_camel(user), status: :ok
+        else
+          render json: { errors: user.errors.full_messages }, status: :unprocessable_entity
+        end
       end
 
-      # Used when updating an existing user
+      private
+
+      def user_params_for_create
+        # By default, new signups have role="user" UNLESS current_user is admin and role param=admin
+        attrs = params.require(:user).permit(
+          :email, :password, :phone, :provider_name,
+          :policy_number, :plan_type, :first_name,
+          :last_name, :role
+        )
+
+        # Force role to "user" if the request isn't from an admin or didn’t explicitly set role=admin
+        if !current_user&.admin? || attrs[:role] != 'admin'
+          attrs[:role] = 'user'
+        end
+
+        attrs
+      end
+
       def user_update_params
-        # Let the user update these fields:
         params.require(:user).permit(:first_name, :last_name, :phone, :email)
       end
 
@@ -68,6 +91,10 @@ module Api
             planType: u.plan_type
           } : nil
         }
+      end
+
+      def not_admin
+        render json: { error: "Not authorized (admin only)" }, status: :forbidden
       end
     end
   end

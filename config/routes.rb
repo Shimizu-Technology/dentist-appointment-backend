@@ -10,9 +10,12 @@ Rails.application.routes.draw do
         get :availabilities, on: :member
       end
       resources :specialties
-      resources :users, only: [:create] do
+      resources :users, only: [:create, :index] do
         collection do
           patch :current
+        end
+        member do
+          patch :promote
         end
       end
     end
