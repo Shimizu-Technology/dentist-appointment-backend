@@ -6,7 +6,8 @@ This project is a **Ruby on Rails** API for scheduling dentist appointments for 
 2. **Appointment scheduling** with conflict checks.  
 3. **Dependents** (children) management for parent users.  
 4. **Multiple dentists** supporting specialized care (e.g., pediatric vs. adult).  
-5. **Appointment types** (e.g., “Cleaning,” “Filling,” “Checkup,” etc.) that admins can create and manage.
+5. **Appointment types** (e.g., “Cleaning,” “Filling,” “Checkup,” etc.) that admins can create and manage.  
+6. **Admin user-management** (list all users, promote user to admin role).
 
 This README provides setup instructions, usage examples, and endpoint documentation.
 
@@ -26,6 +27,7 @@ This README provides setup instructions, usage examples, and endpoint documentat
    - [Dentists](#dentists)  
    - [Appointment Types](#appointment-types)  
    - [Admin Endpoints](#admin-endpoints)  
+   - [Users (Admin Only)](#users-admin-only)  
 7. [Environment Variables](#environment-variables)  
 8. [Deployment](#deployment)  
 9. [Future Enhancements / Next Steps](#future-enhancements--next-steps)  
@@ -45,16 +47,16 @@ This README provides setup instructions, usage examples, and endpoint documentat
 
 1. **Clone the repository**:
 
-```bash
-git clone https://github.com/your-organization/dentist-appointment-backend.git
-cd dentist-appointment-backend
-```
+   ```bash
+   git clone https://github.com/your-organization/dentist-appointment-backend.git
+   cd dentist-appointment-backend
+   ```
 
 2. **Install Ruby gems**:
 
-```bash
-bundle install
-```
+   ```bash
+   bundle install
+   ```
 
 ---
 
@@ -62,16 +64,16 @@ bundle install
 
 1. **Create and migrate the database**:
 
-```bash
-bin/rails db:create
-bin/rails db:migrate
-```
+   ```bash
+   bin/rails db:create
+   bin/rails db:migrate
+   ```
 
 2. **(Optional) Seed the database** if you have seed data in `db/seeds.rb`:
 
-```bash
-bin/rails db:seed
-```
+   ```bash
+   bin/rails db:seed
+   ```
 
 ---
 
@@ -101,7 +103,7 @@ Authorization: Bearer <your_jwt_token_here>
 ```
 
 **Admin vs. Regular User**:  
-- An admin user (`role == "admin"`) has **full** CRUD access to Appointment Types, Dentists, and all Appointments.  
+- An admin user (`role == "admin"`) has **full** CRUD access to Appointment Types, Dentists, all Appointments, and user management.  
 - A regular user can only manage their own appointments and dependents.
 
 ---
@@ -116,26 +118,26 @@ Below is an overview of the primary endpoints, organized by resource. All reques
   **Description**: Logs in a user and returns a JWT token.  
   **Request Body** (JSON):
 
-```json
-{
-  "email": "user@example.com",
-  "password": "password123"
-}
-```
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "password123"
+  }
+  ```
 
   **Response** (JSON):
 
-```json
-{
-  "jwt": "<your_jwt_here>",
-  "user": {
-    "id": 1,
-    "email": "user@example.com",
-    "role": "user"
-    // ... other user fields
+  ```json
+  {
+    "jwt": "<your_jwt_here>",
+    "user": {
+      "id": 1,
+      "email": "user@example.com",
+      "role": "user"
+      // ... other user fields
+    }
   }
-}
-```
+  ```
 
   **Notes**:  
   - This endpoint is **public** (no token required).  
@@ -149,83 +151,26 @@ All endpoints below **require** a valid JWT token in the `Authorization` header.
 
 - **`GET /api/v1/appointments`**  
   **Description**: Returns all appointments.  
-  - If the current user is an **admin**, returns **all** appointments.
+  - If the current user is **admin**, returns **all** appointments.
   - If a **regular user**, returns only that user’s appointments (and their dependents’).  
-
-  **Sample Response**:
-
-```json
-[
-  {
-    "id": 1,
-    "user_id": 2,
-    "appointment_type_id": 1,
-    "dentist_id": 3,
-    "dependent_id": null,
-    "appointment_time": "2025-04-10T09:00:00Z",
-    "status": "scheduled",
-    "created_at": "...",
-    "updated_at": "..."
-  },
-  ...
-]
-```
 
 - **`GET /api/v1/appointments/:id`**  
   **Description**: Show a specific appointment by `id`.  
-  **Access Rules**:  
   - Admin can see any appointment.  
   - Regular user can only see an appointment if it belongs to them or one of their dependents.
 
 - **`POST /api/v1/appointments`**  
   **Description**: Create a new appointment for the current user (or their dependent).  
-  **Request Body** (JSON example):
-
-```json
-{
-  "appointment": {
-    "appointment_time": "2025-04-10T09:00:00Z",
-    "appointment_type_id": 1,
-    "dentist_id": 3,
-    "dependent_id": 5 // optional
-  }
-}
-```
-
-  - `appointment_type_id` must reference a valid Appointment Type.  
-  - `dentist_id` must reference a valid Dentist.  
-  - If `dependent_id` is omitted or `null`, the appointment is for the user themself.  
-
-  **Response** (JSON):
-
-```json
-{
-  "id": 10,
-  "user_id": 2,
-  "dependent_id": 5,
-  "dentist_id": 3,
-  "appointment_type_id": 1,
-  "appointment_time": "2025-04-10T09:00:00Z",
-  "status": "scheduled",
-  ...
-}
-```
-
-  **Conflict Check**: The system checks if the same `dentist_id` + `appointment_time` is already taken with a `status` of `"scheduled"`. If so, it returns `422` with `{ "error": "This time slot is not available." }`.
+  **Conflict Check**: The system checks if the same `dentist_id` + `appointment_time` is already taken with a `status` of `"scheduled"`.
 
 - **`PATCH/PUT /api/v1/appointments/:id`**  
   **Description**: Update an existing appointment’s fields (e.g., time, dentist).  
-  **Access Rules**:  
-  - Admin can update any appointment.  
-  - A regular user can update only if the appointment belongs to them or their dependent.  
   **Conflict Check** is performed if the `dentist_id` or `appointment_time` changes.
 
 - **`DELETE /api/v1/appointments/:id`**  
   **Description**: Cancels/deletes an appointment by ID.  
-  **Access Rules**:  
   - Admin can delete any appointment.  
-  - Regular user can delete only if it belongs to them or a dependent.  
-  **On success**: returns `{ "message": "Appointment canceled." }` with `200 OK`.
+  - Regular user can only delete if it belongs to them or a dependent.
 
 ---
 
@@ -238,118 +183,61 @@ All endpoints require a valid JWT token.
   - **Regular user**: sees only **their own** dependents.
 
 - **`POST /api/v1/dependents`**  
-  Create a dependent for the currently logged-in user.  
-  **Request Body**:
-
-```json
-{
-  "dependent": {
-    "first_name": "Child",
-    "last_name": "Example",
-    "date_of_birth": "2012-01-15"
-  }
-}
-```
-
-  **Response** (JSON):
-
-```json
-{
-  "id": 5,
-  "user_id": 2,
-  "first_name": "Child",
-  "last_name": "Example",
-  "date_of_birth": "2012-01-15",
-  ...
-}
-```
+  Create a dependent for the currently logged-in user.
 
 - **`PATCH/PUT /api/v1/dependents/:id`**  
   Update a dependent’s details.  
-  - Admin can update **any** dependent.  
-  - A regular user can update only if the dependent belongs to them.
+  - Admin can update **any** dependent; user can only update their own.
 
 - **`DELETE /api/v1/dependents/:id`**  
   Remove a dependent.  
-  - Admin can delete any dependent.  
-  - A user can only delete if the dependent belongs to them.
+  - Admin can delete any dependent; user can only delete their own.
 
 ---
 
 ### Dentists
 
-- **`GET /api/v1/dentists`**  
-  List all dentist records.  
-  - Public (no token required).
-
-- **`GET /api/v1/dentists/:id`**  
-  Show a single dentist by ID.  
-  - Public (no token required).
-
-- **`POST /api/v1/dentists`**  
-  **Admin only.** Creates a new dentist record.  
-  **Request Body**:
-
-```json
-{
-  "dentist": {
-    "first_name": "Jane",
-    "last_name": "Doe",
-    "specialty": "Adult Dentistry"
-  }
-}
-```
-
-- **`PATCH/PUT /api/v1/dentists/:id`**  
-  **Admin only.** Updates a dentist’s info.
-
-- **`DELETE /api/v1/dentists/:id`**  
-  **Admin only.** Removes the dentist record.
+- **`GET /api/v1/dentists`** (public)  
+- **`GET /api/v1/dentists/:id`** (public)  
+- **`POST /api/v1/dentists`** (admin only)  
+- **`PATCH/PUT /api/v1/dentists/:id`** (admin only)  
+- **`DELETE /api/v1/dentists/:id`** (admin only)
 
 ---
 
 ### Appointment Types
 
-- **`GET /api/v1/appointment_types`**  
-  Lists all appointment types.  
-  - Public access for `index` and `show`.
-
-- **`GET /api/v1/appointment_types/:id`**  
-  Shows details of one appointment type.  
-  - Public.
-
-- **`POST /api/v1/appointment_types`**  
-  **Admin only.** Create a new appointment type (e.g., “Cleaning,” “Filling,” etc.).
-
-- **`PATCH/PUT /api/v1/appointment_types/:id`**  
-  **Admin only.** Update a type’s name or description.
-
-- **`DELETE /api/v1/appointment_types/:id`**  
-  **Admin only.** Remove an appointment type from the system.
+- **`GET /api/v1/appointment_types`** (public)  
+- **`GET /api/v1/appointment_types/:id`** (public)  
+- **`POST /api/v1/appointment_types`** (admin only)  
+- **`PATCH/PUT /api/v1/appointment_types/:id`** (admin only)  
+- **`DELETE /api/v1/appointment_types/:id`** (admin only)
 
 ---
 
 ### Admin Endpoints
 
-Most “admin” functionality is already integrated into the resource controllers above (e.g., `DentistsController`, `AppointmentTypesController`, and the ability to see all `Appointments`). For clarity, these endpoints require `admin?`:
+Most “admin” functionality is integrated into the resource controllers above (e.g., Dentists, Appointment Types, and Appointments). For clarity, these require `admin?`:
 
 - **Dentists**  
-  - `POST /api/v1/dentists` (create)  
-  - `PATCH/PUT /api/v1/dentists/:id` (update)  
-  - `DELETE /api/v1/dentists/:id` (destroy)
-
 - **Appointment Types**  
-  - `POST /api/v1/appointment_types` (create)  
-  - `PATCH/PUT /api/v1/appointment_types/:id` (update)  
-  - `DELETE /api/v1/appointment_types/:id` (destroy)
+- **Appointments** (admin sees all, can update/delete all)
 
-- **Appointments**  
-  - `GET /api/v1/appointments` (admin sees **all**)  
-  - `GET /api/v1/appointments/:id` (any, but admin can see all)  
-  - `PATCH/PUT /api/v1/appointments/:id` (admin can update any)  
-  - `DELETE /api/v1/appointments/:id` (admin can delete any)
+### Users (Admin Only)
 
-Your separate front-end for admin users can call these endpoints, passing an **admin** user’s JWT token in the `Authorization` header. The back-end checks `current_user.admin?` to allow or deny the action.
+We’ve also added routes to allow **admin** users to manage other user accounts:
+
+- **`GET /api/v1/users`**  
+  Returns a list of all users (admin-only).  
+
+- **`POST /api/v1/users`**  
+  Create a new user.  
+  - If `role: "admin"` is passed in and the current user is admin, the new user can be created as admin.  
+  - Otherwise, defaults to `role: "user"`.
+
+- **`PATCH /api/v1/users/:id/promote`**  
+  Promote a user (by ID) to admin role.  
+  - Returns the updated user object on success.  
 
 ---
 
@@ -365,23 +253,24 @@ Your separate front-end for admin users can call these endpoints, passing an **a
 
 Typical steps to deploy to a service like **Render**, **Heroku**, or a container-based platform:
 
-1. **Set environment variables** (like `RAILS_MASTER_KEY`) in your hosting environment.
+1. **Set environment variables** (like `RAILS_MASTER_KEY`) in your hosting environment or CI/CD build system.  
+2. **Migrate** the database in the remote environment:
 
-```bash
-bin/rails db:migrate
-```
+   ```bash
+   bin/rails db:migrate
+   ```
 
 3. **(If needed)** Precompile assets or rely on host’s build environment:
 
-```bash
-SECRET_KEY_BASE_DUMMY=1 bin/rails assets:precompile
-```
+   ```bash
+   SECRET_KEY_BASE_DUMMY=1 bin/rails assets:precompile
+   ```
 
 4. **Start** the Puma server:
 
-```bash
-bin/rails server
-```
+   ```bash
+   bin/rails server
+   ```
 
 For Docker-based deployments, see the provided `Dockerfile` and `.dockerignore`.
 
@@ -394,3 +283,4 @@ For Docker-based deployments, see the provided `Dockerfile` and `.dockerignore`.
 - **Payment Integration** (Stripe, PayPal, etc.).  
 - **Email/SMS notifications** for reminders or confirmations.  
 - **Advanced admin reporting** (monthly appointment volume, no-show rates, etc.).  
+- **Extended user management**: Possibly allow demotion or user deactivation, plus more robust role or permission systems.
