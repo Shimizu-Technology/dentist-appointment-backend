@@ -4,7 +4,6 @@ module Api
     class AppointmentsController < BaseController
       # GET /api/v1/appointments
       def index
-        # 1) Different base scope for admin vs non-admin
         if current_user.admin?
           base_scope = Appointment.includes(:dentist, :appointment_type, :user)
         else
@@ -12,11 +11,9 @@ module Api
                                    .where(user_id: current_user.id)
         end
 
-        # 2) Parse pagination params
         page     = (params[:page].presence || 1).to_i
         per_page = (params[:per_page].presence || 10).to_i
 
-        # 3) Apply Kaminari pagination
         @appointments = base_scope.order(id: :desc).page(page).per(per_page)
 
         render json: {
@@ -32,7 +29,22 @@ module Api
 
       # POST /api/v1/appointments
       def create
-        appointment = Appointment.new(appointment_params.merge(user_id: current_user.id))
+        # If admin and a user_id param is present, use that user_id. Otherwise, use current_user.id
+        chosen_user_id = if current_user.admin? && appointment_params[:user_id].present?
+                           appointment_params[:user_id]
+                         else
+                           current_user.id
+                         end
+
+        appointment = Appointment.new(
+          user_id: chosen_user_id,
+          dentist_id: appointment_params[:dentist_id],
+          appointment_type_id: appointment_params[:appointment_type_id],
+          appointment_time: appointment_params[:appointment_time],
+          dependent_id: appointment_params[:dependent_id],
+          status: appointment_params[:status],
+          notes: appointment_params[:notes]
+        )
 
         # Conflict check
         if Appointment.exists?(
@@ -40,8 +52,7 @@ module Api
           appointment_time: appointment.appointment_time,
           status: %w[scheduled]
         )
-          render json: { error: "This time slot is not available." }, status: :unprocessable_entity
-          return
+          return render json: { error: "This time slot is not available." }, status: :unprocessable_entity
         end
 
         if appointment.save
@@ -106,7 +117,8 @@ module Api
           :dentist_id,
           :status,
           :dependent_id,
-          :notes
+          :notes,
+          :user_id
         )
       end
 
@@ -124,15 +136,6 @@ module Api
           createdAt:          appt.created_at.iso8601,
           updatedAt:          appt.updated_at.iso8601,
           notes:              appt.notes,
-
-          user: appt.user && {
-            id:         appt.user.id,
-            firstName:  appt.user.first_name,
-            lastName:   appt.user.last_name,
-            email:      appt.user.email,
-            phone:      appt.user.phone
-          },
-
           dentist: appt.dentist && {
             id:         appt.dentist.id,
             firstName:  appt.dentist.first_name,

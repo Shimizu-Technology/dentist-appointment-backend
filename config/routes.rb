@@ -13,6 +13,7 @@ Rails.application.routes.draw do
       resources :users, only: [:create, :index] do
         collection do
           patch :current
+          get :search
         end
         member do
           patch :promote

@@ -68,6 +68,27 @@ module Api
         end
       end
 
+      def search
+        return not_admin unless current_user.admin?
+
+        query = params[:q].to_s.strip.downcase
+        if query.blank?
+          render json: { users: [] }, status: :ok
+          return
+        end
+
+        # Simple approach: search first_name, last_name, or email
+        # For large data sets, consider PG trigram indexes or separate approach
+        matching_users = User.where(
+          "LOWER(first_name) LIKE ? OR LOWER(last_name) LIKE ? OR LOWER(email) LIKE ?",
+          "%#{query}%", "%#{query}%", "%#{query}%"
+        ).order(:id).limit(20)
+
+        render json: {
+          users: matching_users.map { |u| user_to_camel(u) }
+        }, status: :ok
+      end
+
       private
 
       def user_params_for_create
