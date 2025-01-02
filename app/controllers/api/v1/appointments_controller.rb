@@ -124,6 +124,15 @@ module Api
           createdAt:          appt.created_at.iso8601,
           updatedAt:          appt.updated_at.iso8601,
           notes:              appt.notes,
+
+          user: appt.user && {
+            id:         appt.user.id,
+            firstName:  appt.user.first_name,
+            lastName:   appt.user.last_name,
+            email:      appt.user.email,
+            phone:      appt.user.phone
+          },
+
           dentist: appt.dentist && {
             id:         appt.dentist.id,
             firstName:  appt.dentist.first_name,
