@@ -1,7 +1,8 @@
-# app/controllers/api/v1/appointments_controller.rb
+# File: /app/controllers/api/v1/appointments_controller.rb
 module Api
   module V1
     class AppointmentsController < BaseController
+
       # GET /api/v1/appointments
       def index
         if current_user.admin?
@@ -29,7 +30,7 @@ module Api
 
       # POST /api/v1/appointments
       def create
-        # If admin and a user_id param is present, use that user_id. Otherwise, use current_user.id
+        # If admin and a user_id param is present, use that user_id. Otherwise use current_user.id
         chosen_user_id = if current_user.admin? && appointment_params[:user_id].present?
                            appointment_params[:user_id]
                          else
@@ -46,14 +47,10 @@ module Api
           notes: appointment_params[:notes]
         )
 
-        # Conflict check
-        if Appointment.exists?(
-          dentist_id: appointment.dentist_id,
-          appointment_time: appointment.appointment_time,
-          status: %w[scheduled]
-        )
-          return render json: { error: "This time slot is not available." }, status: :unprocessable_entity
-        end
+        # ------------------------------------------
+        #  CONFLICT CHECK REMOVED (the old snippet)
+        #  We'll rely on the model-level validation
+        # ------------------------------------------
 
         if appointment.save
           render json: appointment_to_camel(appointment), status: :created
@@ -79,17 +76,7 @@ module Api
           return render json: { error: "Not authorized" }, status: :forbidden
         end
 
-        # Check conflict only if changing dentist/time
-        if appointment_params[:dentist_id].present? && appointment_params[:appointment_time].present?
-          if Appointment.exists?(
-            dentist_id: appointment_params[:dentist_id],
-            appointment_time: appointment_params[:appointment_time],
-            status: %w[scheduled]
-          )
-            return render json: { error: "This time slot is not available." }, status: :unprocessable_entity
-          end
-        end
-
+        # Same: remove any old “exact match” conflict logic
         if appointment.update(appointment_params)
           render json: appointment_to_camel(appointment), status: :ok
         else
@@ -145,7 +132,8 @@ module Api
           appointmentType: appt.appointment_type && {
             id:          appt.appointment_type.id,
             name:        appt.appointment_type.name,
-            description: appt.appointment_type.description
+            description: appt.appointment_type.description,
+            duration:    appt.appointment_type.duration
           }
         }
       end

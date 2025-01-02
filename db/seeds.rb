@@ -174,41 +174,56 @@ DentistAvailability.create!(dentist: dentist3, day_of_week: 5, start_time: "09:0
 # Appointments
 puts "Creating random Appointments..."
 
-def random_future_time(days_in_future = 90)
-  # random day within the next X days, random hour between 8am-5pm
-  day_offset = rand(1..days_in_future)
-  hour       = rand(8..17)
-  Faker::Time.forward(days: day_offset, period: :day).change(hour: hour)
+def random_weekday_future_time(days_in_future = 90)
+  loop do
+    day_offset = rand(1..days_in_future)
+    hour       = rand(8..17)
+    date       = Faker::Time.forward(days: day_offset, period: :day).change(hour: hour)
+    # skip weekends
+    unless date.saturday? || date.sunday?
+      return date
+    end
+  end
 end
 
-def random_past_time(days_in_past = 90)
-  # random day within last X days, random hour between 8am-5pm
-  day_offset = rand(1..days_in_past)
-  hour       = rand(8..17)
-  Faker::Time.backward(days: day_offset, period: :day).change(hour: hour)
+def random_weekday_past_time(days_in_past = 90)
+  loop do
+    day_offset = rand(1..days_in_past)
+    hour       = rand(8..17)
+    date       = Faker::Time.backward(days: day_offset, period: :day).change(hour: hour)
+    # skip weekends
+    unless date.saturday? || date.sunday?
+      return date
+    end
+  end
 end
 
 status_options = %w[scheduled completed cancelled]
 
 users.each do |user|
-  # For each user, create a random number of appointments (0..5).
-  # We'll pick a random dependent, dentist, appointment_type, time, and status.
   user_dependents = user.dependents
   next if user_dependents.empty?
 
   rand(0..5).times do
-    apt_time   = [true, false].sample ? random_future_time : random_past_time
+    # 50% future, 50% past
+    apt_time   = [true, false].sample ? random_weekday_future_time : random_weekday_past_time
     apt_status = status_options.sample
+    appt_type  = appointment_types.sample
 
-    Appointment.create!(
-      user:              user,
-      dependent:         user_dependents.sample,
-      dentist:           dentists.sample,
-      appointment_type:  appointment_types.sample,
-      appointment_time:  apt_time,
-      status:            apt_status,
-      notes:             Faker::Lorem.sentence(word_count: 6)
-    )
+    # Attempt to create. If it fails validation, rescue & skip
+    begin
+      Appointment.create!(
+        user:             user,
+        dependent:        user_dependents.sample,
+        dentist:          dentists.sample,
+        appointment_type: appt_type,
+        appointment_time: apt_time,
+        status:           apt_status,
+        notes:            Faker::Lorem.sentence(word_count: 6)
+      )
+    rescue ActiveRecord::RecordInvalid => e
+      puts "  -> Skipping an invalid appointment: #{e.message}"
+    end
   end
 end
 
