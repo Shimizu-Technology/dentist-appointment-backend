@@ -1,4 +1,4 @@
-# app/controllers/api/v1/users_controller.rb
+# File: app/controllers/api/v1/users_controller.rb
 
 module Api
   module V1
@@ -10,14 +10,30 @@ module Api
       def index
         return not_admin unless current_user.admin?
 
-        users = User.all.order(:id)
-        render json: users.map { |u| user_to_camel(u) }, status: :ok
+        # Parse pagination params (defaults to page=1, per_page=10)
+        page     = (params[:page].presence || 1).to_i
+        per_page = (params[:per_page].presence || 10).to_i
+
+        # Order by ID for consistency
+        base_scope = User.order(:id)
+
+        # Use Kaminari’s .page(x).per(y) to paginate
+        @users = base_scope.page(page).per(per_page)
+
+        render json: {
+          users: @users.map { |u| user_to_camel(u) },
+          meta: {
+            currentPage: @users.current_page,
+            totalPages:  @users.total_pages,
+            totalCount:  @users.total_count,
+            perPage:     per_page
+          }
+        }, status: :ok
       end
 
       # POST /api/v1/users
       def create
         user = User.new(user_params_for_create)
-
         if user.save
           token = JWT.encode({ user_id: user.id }, Rails.application.credentials.secret_key_base)
           render json: { jwt: token, user: user_to_camel(user) }, status: :created
@@ -27,7 +43,6 @@ module Api
       end
 
       # PATCH /api/v1/users/current
-      # Updates the current user’s profile (first_name, last_name, phone, email).
       def current
         unless @current_user
           render json: { error: 'Unauthorized' }, status: :unauthorized
@@ -42,12 +57,10 @@ module Api
       end
 
       # PATCH /api/v1/users/:id/promote
-      # Admin-only: change a user’s role to "admin"
       def promote
         return not_admin unless current_user.admin?
 
         user = User.find(params[:id])
-        # Optionally, check if user.role is already "admin"
         if user.update(role: 'admin')
           render json: user_to_camel(user), status: :ok
         else
@@ -58,18 +71,14 @@ module Api
       private
 
       def user_params_for_create
-        # By default, new signups have role="user" UNLESS current_user is admin and role param=admin
         attrs = params.require(:user).permit(
           :email, :password, :phone, :provider_name,
           :policy_number, :plan_type, :first_name,
           :last_name, :role
         )
-
-        # Force role to "user" if the request isn't from an admin or didn’t explicitly set role=admin
         if !current_user&.admin? || attrs[:role] != 'admin'
           attrs[:role] = 'user'
         end
-
         attrs
       end
 
