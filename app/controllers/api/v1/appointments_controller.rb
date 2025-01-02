@@ -95,6 +95,51 @@ module Api
         render json: { message: "Appointment canceled." }, status: :ok
       end
 
+      # GET /api/v1/appointments/day_appointments?dentist_id=X&date=YYYY-MM-DD
+      # Returns all appointments for that dentist on that specific date
+      def day_appointments
+        # 1. Grab required params
+        dentist_id = params[:dentist_id]
+        date_str   = params[:date]
+
+        if dentist_id.blank? || date_str.blank?
+          return render json: { error: "Missing dentist_id or date" }, status: :unprocessable_entity
+        end
+
+        # 2. Parse the date
+        date_obj = begin
+          Date.parse(date_str)
+        rescue ArgumentError
+          return render json: { error: "Invalid date format" }, status: :unprocessable_entity
+        end
+
+        # 3. Query appointments for that dentist on that date
+        #    (We assume you have appointment_time in the DB as a DateTime)
+        start_of_day = date_obj.beginning_of_day
+        end_of_day   = date_obj.end_of_day
+
+        # If an admin calls this, they see all. Otherwise, optionally check permissions if needed.
+        # For simplicity, we return all appointments for the dentist on that day.
+        appts = Appointment.includes(:appointment_type)
+                           .where(dentist_id: dentist_id)
+                           .where(appointment_time: start_of_day..end_of_day)
+                           .order(:appointment_time)
+
+        # 4. Return minimal JSON: each item has the start time + the appointment’s duration
+        #    so the front end can figure out the time block that is taken.
+        #    If you store the “duration” in the appointmentType, you can pass that as well.
+        results = appts.map do |appt|
+          {
+            id: appt.id,
+            appointmentTime: appt.appointment_time.iso8601,
+            duration: appt.appointment_type&.duration || 30, 
+            status: appt.status
+          }
+        end
+
+        render json: { appointments: results }, status: :ok
+      end
+
       private
 
       def appointment_params

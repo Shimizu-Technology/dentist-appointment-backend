@@ -104,7 +104,7 @@ puts "Creating 10 Random Admin Users..."
 10.times do
   User.create!(
     email:       Faker::Internet.unique.email,
-    password:    "password",       # default password
+    password:    "password",  # default password
     role:        "admin",
     provider_name: Faker::Company.name,
     policy_number: Faker::Alphanumeric.alpha(number: 5).upcase,
@@ -141,7 +141,7 @@ users.each do |user|
   rand(2..4).times do
     user.dependents.create!(
       first_name:    Faker::Name.first_name,
-      last_name:     user.last_name,  # or Faker::Name.last_name
+      last_name:     user.last_name,  
       date_of_birth: Faker::Date.birthday(min_age: 1, max_age: 17)
     )
   end
@@ -210,7 +210,6 @@ users.each do |user|
     apt_status = status_options.sample
     appt_type  = appointment_types.sample
 
-    # Attempt to create. If it fails validation, rescue & skip
     begin
       Appointment.create!(
         user:             user,
