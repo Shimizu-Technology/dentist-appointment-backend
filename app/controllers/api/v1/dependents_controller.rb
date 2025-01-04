@@ -3,9 +3,6 @@ module Api
   module V1
     class DependentsController < BaseController
       # GET /api/v1/dependents
-      #
-      # Now: Always returns only the **current_user**’s dependents,
-      # regardless of role (admin or not).
       def index
         dependents = current_user.dependents
         render json: dependents.map { |dep| dependent_to_camel(dep) }, status: :ok
@@ -13,7 +10,9 @@ module Api
 
       # POST /api/v1/dependents
       def create
-        dependent = current_user.dependents.new(dependent_params)
+        # We transform the incoming camelCase keys to underscore so that
+        # the Dependent model fields get set properly.
+        dependent = current_user.dependents.new(converted_dependent_params)
 
         if dependent.save
           render json: dependent_to_camel(dependent), status: :created
@@ -26,7 +25,6 @@ module Api
       def show
         dependent = Dependent.find(params[:id])
         return not_authorized unless can_manage_dependent?(dependent)
-
         render json: dependent_to_camel(dependent), status: :ok
       end
 
@@ -35,7 +33,7 @@ module Api
         dependent = Dependent.find(params[:id])
         return not_authorized unless can_manage_dependent?(dependent)
 
-        if dependent.update(dependent_params)
+        if dependent.update(converted_dependent_params)
           render json: dependent_to_camel(dependent), status: :ok
         else
           render json: { errors: dependent.errors.full_messages }, status: :unprocessable_entity
@@ -53,12 +51,17 @@ module Api
 
       private
 
-      def dependent_params
-        params.require(:dependent).permit(:first_name, :last_name, :date_of_birth)
+      # 1) Permit the incoming camelCase keys firstName, lastName, dateOfBirth.
+      # 2) Convert them to underscore keys for the actual DB columns.
+      def converted_dependent_params
+        permitted = params.require(:dependent).permit(:firstName, :lastName, :dateOfBirth)
+        {
+          first_name:    permitted[:firstName],
+          last_name:     permitted[:lastName],
+          date_of_birth: permitted[:dateOfBirth]
+        }
       end
 
-      # Helper: only the owner of the dependent or an admin can manage them.
-      # But here we check that the user is either admin or the dependent’s actual user.
       def can_manage_dependent?(dependent)
         current_user.admin? || dependent.user_id == current_user.id
       end
@@ -67,7 +70,6 @@ module Api
         render json: { error: "Not authorized" }, status: :forbidden
       end
 
-      # Convert dependent model to “camelCase” keys for JSON
       def dependent_to_camel(dep)
         {
           id:          dep.id,
