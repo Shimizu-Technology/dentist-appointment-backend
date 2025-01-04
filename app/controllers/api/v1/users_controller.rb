@@ -5,19 +5,14 @@ module Api
     class UsersController < BaseController
       skip_before_action :authenticate_user!, only: [:create]
 
-      # GET /api/v1/users
-      # Admin-only: list all users
+      # GET /api/v1/users (Admin-only, paginated)
       def index
         return not_admin unless current_user.admin?
 
-        # Parse pagination params (defaults to page=1, per_page=10)
         page     = (params[:page].presence || 1).to_i
         per_page = (params[:per_page].presence || 10).to_i
 
-        # Order by ID for consistency
         base_scope = User.order(:id)
-
-        # Use Kaminari’s .page(x).per(y) to paginate
         @users = base_scope.page(page).per(per_page)
 
         render json: {
@@ -31,7 +26,7 @@ module Api
         }, status: :ok
       end
 
-      # POST /api/v1/users
+      # POST /api/v1/users (Sign up; or admin can create a user)
       def create
         user = User.new(user_params_for_create)
         if user.save
@@ -42,11 +37,10 @@ module Api
         end
       end
 
-      # PATCH /api/v1/users/current
+      # PATCH /api/v1/users/current (Update the currently logged-in user)
       def current
         unless @current_user
-          render json: { error: 'Unauthorized' }, status: :unauthorized
-          return
+          return render json: { error: 'Unauthorized' }, status: :unauthorized
         end
 
         if @current_user.update(user_update_params)
@@ -56,7 +50,7 @@ module Api
         end
       end
 
-      # PATCH /api/v1/users/:id/promote
+      # PATCH /api/v1/users/:id/promote (Admin-only)
       def promote
         return not_admin unless current_user.admin?
 
@@ -68,24 +62,43 @@ module Api
         end
       end
 
+      # GET /api/v1/users/search?q=...&page=...&per_page=...
+      # Admin-only search by firstName, lastName, or email. Paginated.
       def search
         return not_admin unless current_user.admin?
 
-        query = params[:q].to_s.strip.downcase
+        query    = params[:q].to_s.strip.downcase
+        page     = (params[:page].presence || 1).to_i
+        per_page = (params[:per_page].presence || 10).to_i
+
         if query.blank?
-          render json: { users: [] }, status: :ok
-          return
+          # If nothing typed, return empty or you could default to all
+          return render json: {
+            users: [],
+            meta: {
+              currentPage: 1,
+              totalPages:  1,
+              totalCount:  0,
+              perPage:     per_page
+            }
+          }, status: :ok
         end
 
-        # Simple approach: search first_name, last_name, or email
-        # For large data sets, consider PG trigram indexes or separate approach
-        matching_users = User.where(
+        base_scope = User.where(
           "LOWER(first_name) LIKE ? OR LOWER(last_name) LIKE ? OR LOWER(email) LIKE ?",
           "%#{query}%", "%#{query}%", "%#{query}%"
-        ).order(:id).limit(20)
+        ).order(:id)
+
+        @users = base_scope.page(page).per(per_page)
 
         render json: {
-          users: matching_users.map { |u| user_to_camel(u) }
+          users: @users.map { |u| user_to_camel(u) },
+          meta: {
+            currentPage: @users.current_page,
+            totalPages:  @users.total_pages,
+            totalCount:  @users.total_count,
+            perPage:     per_page
+          }
         }, status: :ok
       end
 
@@ -97,6 +110,7 @@ module Api
           :policy_number, :plan_type, :first_name,
           :last_name, :role
         )
+        # If non-admin tries to set role=admin, override to user
         if !current_user&.admin? || attrs[:role] != 'admin'
           attrs[:role] = 'user'
         end
@@ -109,16 +123,16 @@ module Api
 
       def user_to_camel(u)
         {
-          id: u.id,
-          email: u.email,
-          role: u.role,
-          firstName: u.first_name,
-          lastName: u.last_name,
-          phone: u.phone,
+          id:          u.id,
+          email:       u.email,
+          role:        u.role,
+          firstName:   u.first_name,
+          lastName:    u.last_name,
+          phone:       u.phone,
           insuranceInfo: u.provider_name ? {
             providerName: u.provider_name,
             policyNumber: u.policy_number,
-            planType: u.plan_type
+            planType:     u.plan_type
           } : nil
         }
       end
