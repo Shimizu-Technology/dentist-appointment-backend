@@ -1,17 +1,13 @@
-# app/controllers/api/v1/dependents_controller.rb
+# File: app/controllers/api/v1/dependents_controller.rb
 module Api
   module V1
     class DependentsController < BaseController
       # GET /api/v1/dependents
+      #
+      # Now: Always returns only the **current_user**’s dependents,
+      # regardless of role (admin or not).
       def index
-        if current_user.admin?
-          # Admin sees all dependents
-          dependents = Dependent.all
-        else
-          # Regular user sees only their own
-          dependents = current_user.dependents
-        end
-
+        dependents = current_user.dependents
         render json: dependents.map { |dep| dependent_to_camel(dep) }, status: :ok
       end
 
@@ -61,6 +57,8 @@ module Api
         params.require(:dependent).permit(:first_name, :last_name, :date_of_birth)
       end
 
+      # Helper: only the owner of the dependent or an admin can manage them.
+      # But here we check that the user is either admin or the dependent’s actual user.
       def can_manage_dependent?(dependent)
         current_user.admin? || dependent.user_id == current_user.id
       end
@@ -69,15 +67,16 @@ module Api
         render json: { error: "Not authorized" }, status: :forbidden
       end
 
+      # Convert dependent model to “camelCase” keys for JSON
       def dependent_to_camel(dep)
         {
-          id: dep.id,
-          userId: dep.user_id,
-          firstName: dep.first_name,
-          lastName: dep.last_name,
+          id:          dep.id,
+          userId:      dep.user_id,
+          firstName:   dep.first_name,
+          lastName:    dep.last_name,
           dateOfBirth: dep.date_of_birth&.strftime('%Y-%m-%d'),
-          createdAt: dep.created_at.iso8601,
-          updatedAt: dep.updated_at.iso8601
+          createdAt:   dep.created_at.iso8601,
+          updatedAt:   dep.updated_at.iso8601
         }
       end
     end
