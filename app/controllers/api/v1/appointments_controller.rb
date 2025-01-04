@@ -96,31 +96,37 @@ module Api
       def day_appointments
         dentist_id = params[:dentist_id]
         date_str   = params[:date]
-        ignore_id  = params[:ignore_id].presence  # <- we read this param
-
+        ignore_id  = params[:ignore_id].presence
+      
+        # NEW: Check if day is globally closed
+        if ClosedDay.exists?(date: date_str)
+          return render json: {
+            appointments: [],
+            closedDay: true, # or any extra info you like
+            message: "This day (#{date_str}) is globally closed."
+          }, status: :ok
+        end
+      
         if dentist_id.blank? || date_str.blank?
           return render json: { error: "Missing dentist_id or date" }, status: :unprocessable_entity
         end
-
-        date_obj = begin
-          Date.parse(date_str)
-        rescue ArgumentError
+      
+        date_obj = Date.parse(date_str) rescue nil
+        unless date_obj
           return render json: { error: "Invalid date format" }, status: :unprocessable_entity
         end
-
+      
         start_of_day = date_obj.beginning_of_day
         end_of_day   = date_obj.end_of_day
-
+      
         appts = Appointment.includes(:appointment_type)
-                          .where(dentist_id: dentist_id)
-                          .where(appointment_time: start_of_day..end_of_day)
-                          .order(:appointment_time)
-
+                           .where(dentist_id: dentist_id)
+                           .where(appointment_time: start_of_day..end_of_day)
+                           .order(:appointment_time)
+      
         # Exclude the appointment we’re editing, if provided
-        if ignore_id
-          appts = appts.where.not(id: ignore_id)
-        end
-
+        appts = appts.where.not(id: ignore_id) if ignore_id
+      
         results = appts.map do |appt|
           {
             id: appt.id,
@@ -129,9 +135,9 @@ module Api
             status: appt.status
           }
         end
-
+      
         render json: { appointments: results }, status: :ok
-      end
+      end      
 
       private
 

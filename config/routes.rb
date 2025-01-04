@@ -23,6 +23,7 @@ Rails.application.routes.draw do
           patch :promote
         end
       end
+      resources :closed_days, only: [:index, :create, :destroy]
     end
   end
 end
