@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_01_04_013634) do
+ActiveRecord::Schema[7.2].define(version: 2025_01_04_023824) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -36,6 +36,13 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_04_013634) do
     t.index ["dentist_id"], name: "index_appointments_on_dentist_id"
     t.index ["dependent_id"], name: "index_appointments_on_dependent_id"
     t.index ["user_id"], name: "index_appointments_on_user_id"
+  end
+
+  create_table "clinic_settings", force: :cascade do |t|
+    t.string "open_time", default: "09:00", null: false
+    t.string "close_time", default: "17:00", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
   end
 
   create_table "closed_days", force: :cascade do |t|
