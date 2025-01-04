@@ -1,4 +1,5 @@
-# File: /app/controllers/api/v1/appointments_controller.rb
+# File: app/controllers/api/v1/appointments_controller.rb
+
 module Api
   module V1
     class AppointmentsController < BaseController
@@ -91,10 +92,11 @@ module Api
         render json: { message: "Appointment canceled." }, status: :ok
       end
 
-      # GET /api/v1/appointments/day_appointments?dentist_id=X&date=YYYY-MM-DD
+      # GET /api/v1/appointments/day_appointments?dentist_id=X&date=YYYY-MM-DD&ignore_id=Y
       def day_appointments
         dentist_id = params[:dentist_id]
         date_str   = params[:date]
+        ignore_id  = params[:ignore_id].presence  # <- we read this param
 
         if dentist_id.blank? || date_str.blank?
           return render json: { error: "Missing dentist_id or date" }, status: :unprocessable_entity
@@ -110,9 +112,14 @@ module Api
         end_of_day   = date_obj.end_of_day
 
         appts = Appointment.includes(:appointment_type)
-                           .where(dentist_id: dentist_id)
-                           .where(appointment_time: start_of_day..end_of_day)
-                           .order(:appointment_time)
+                          .where(dentist_id: dentist_id)
+                          .where(appointment_time: start_of_day..end_of_day)
+                          .order(:appointment_time)
+
+        # Exclude the appointment we’re editing, if provided
+        if ignore_id
+          appts = appts.where.not(id: ignore_id)
+        end
 
         results = appts.map do |appt|
           {
@@ -140,7 +147,6 @@ module Api
         )
       end
 
-      # UPDATED: returns nested :user and :dependent objects
       def appointment_to_camel(appt)
         {
           id:                appt.id,
@@ -156,7 +162,6 @@ module Api
           updatedAt:         appt.updated_at.iso8601,
           notes:             appt.notes,
 
-          # Add the entire user object
           user: appt.user && {
             id:        appt.user.id,
             email:     appt.user.email,
@@ -166,7 +171,6 @@ module Api
             role:      appt.user.role
           },
 
-          # Add the entire dependent object
           dependent: appt.dependent && {
             id:          appt.dependent.id,
             firstName:   appt.dependent.first_name,
