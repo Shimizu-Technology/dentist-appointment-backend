@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_01_04_023824) do
+ActiveRecord::Schema[7.2].define(version: 2025_01_04_045356) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -43,6 +43,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_04_023824) do
     t.string "close_time", default: "17:00", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "open_days", default: "1,2,3,4,5", null: false
   end
 
   create_table "closed_days", force: :cascade do |t|

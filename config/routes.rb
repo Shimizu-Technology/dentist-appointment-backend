@@ -1,5 +1,3 @@
-# config/routes.rb
-
 Rails.application.routes.draw do
   namespace :api do
     namespace :v1 do
@@ -38,13 +36,13 @@ Rails.application.routes.draw do
         end
       end
 
-      # Closed Days (block entire days)
+      # Closed Days
       resources :closed_days, only: [:index, :create, :destroy]
 
-      # Schedules (Admin-only) - for global open/close times, etc.
-      # GET /api/v1/schedules => schedules#index  (or show)
-      # PATCH /api/v1/schedules => schedules#update
-      resources :schedules, only: [:index, :update]
+      # Schedules => single resource (singular)
+      resource :schedule, only: [:show, :update], controller: :schedules
+
+      resources :dentist_availabilities, only: [:create, :update, :destroy]
     end
   end
 end
