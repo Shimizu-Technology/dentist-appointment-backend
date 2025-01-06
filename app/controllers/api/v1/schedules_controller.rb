@@ -1,4 +1,4 @@
-# app/controllers/api/v1/schedules_controller.rb
+# File: app/controllers/api/v1/schedules_controller.rb
 module Api
   module V1
     class SchedulesController < BaseController
@@ -8,9 +8,11 @@ module Api
       def show
         setting = ClinicSetting.singleton
         closed_days = ClosedDay.order(:date)
-        dentist_availabilities = DentistAvailability.order(:dentist_id, :day_of_week)
 
-        # Convert open_days (e.g. "1,2,3,4,5") to an array of integers [1,2,3,4,5]
+        # Replaces the old "dentist_availabilities" with "dentist_unavailabilities"
+        dentist_unavailabilities = DentistUnavailability.order(:dentist_id, :date, :start_time)
+
+        # Convert open_days (e.g., "1,2,3,4,5") to an array of integers [1,2,3,4,5]
         open_days_array = setting.open_days.split(",").map(&:to_i)
 
         render json: {
@@ -26,15 +28,16 @@ module Api
             }
           },
 
-          dentistAvailabilities: dentist_availabilities.map { |da|
+          # Now listing dentistUnavailabilities (not dayOfWeek).
+          dentistUnavailabilities: dentist_unavailabilities.map do |du|
             {
-              id:        da.id,
-              dentistId: da.dentist_id,
-              dayOfWeek: da.day_of_week,
-              startTime: da.start_time,
-              endTime:   da.end_time
+              id:        du.id,
+              dentistId: du.dentist_id,
+              date:      du.date.to_s,
+              startTime: du.start_time,
+              endTime:   du.end_time
             }
-          }
+          end
         }, status: :ok
       end
 
@@ -43,12 +46,12 @@ module Api
         setting = ClinicSetting.singleton
 
         # Expecting params[:open_days] to be an array of day indexes (e.g. [1,2,3,4,5])
-        open_days_str = if params[:open_days].present?
-          params[:open_days].join(",") # turn [1,2,3] into "1,2,3"
-        else
-          # if nothing provided, fallback to empty string or default
-          ""
-        end
+        open_days_str =
+          if params[:open_days].present?
+            params[:open_days].join(",") # turn [1,2,3] into "1,2,3"
+          else
+            ""
+          end
 
         if setting.update(
           open_time:  params[:clinic_open_time],
@@ -68,10 +71,7 @@ module Api
       private
 
       def require_admin!
-        render(
-          json:   { error: 'Not authorized (admin only)' },
-          status: :forbidden
-        ) unless current_user&.admin?
+        render json: { error: 'Not authorized (admin only)' }, status: :forbidden unless current_user&.admin?
       end
     end
   end

@@ -1,16 +1,16 @@
-# File: app/models/appointment.rb
-
+# app/models/appointment.rb
 class Appointment < ApplicationRecord
   belongs_to :user
-  belongs_to :dependent, optional: true
   belongs_to :dentist
   belongs_to :appointment_type
+  belongs_to :dependent, optional: true
 
   before_create :set_default_status
 
-  # Validations
-  validate :no_conflicts_for_dentist
-  validate :fits_into_availability
+  validate :clinic_not_closed_on_this_date
+  validate :within_clinic_hours
+  validate :dentist_not_unavailable
+  validate :dentist_not_already_booked
 
   private
 
@@ -18,85 +18,80 @@ class Appointment < ApplicationRecord
     self.status ||= 'scheduled'
   end
 
-  # ----------------------------------------------------------------------
-  # 1) Prevent Overlapping with Other Appointments for this Dentist
-  #
-  # We only re-check for overlaps if:
-  #  - The dentist changes, or
-  #  - The appointment_time changes, or
-  #  - The appointment_type changes to a different duration.
-  # ----------------------------------------------------------------------
-  def no_conflicts_for_dentist
-    # (A) Figure out the old vs. new duration
-    old_duration = if appointment_type_id_changed?
-      # If appointment_type_id changed, look up the previous ID
-      old_type_id = appointment_type_id_was
-      AppointmentType.find_by(id: old_type_id)&.duration || 30
-    else
-      # If appointment_type_id is not changing, then there's no "previous" ID
-      appointment_type&.duration || 30
-    end
+  # -------------------------------------------
+  # Instead of “Sunday is closed,” we use the
+  # clinic_settings to see which days are open,
+  # and also check closed_days.
+  # -------------------------------------------
+  def clinic_not_closed_on_this_date
+    setting = ClinicSetting.singleton
 
-    new_duration = appointment_type&.duration || 30
+    # Convert "1,2,3,4,5" => [1,2,3,4,5]
+    open_days = setting.open_days.split(',').map(&:to_i)
 
-    # (B) If nothing that affects timeslot changed, skip the conflict check
-    unless will_save_change_to_dentist_id? ||
-           will_save_change_to_appointment_time? ||
-           (old_duration != new_duration)
+    # 0=Sunday, 1=Monday, 2=Tuesday, ...
+    wday = appointment_time.wday
+
+    # if wday not in the array of open days, fail
+    unless open_days.include?(wday)
+      errors.add(:base, "Clinic is closed on that day (wday=#{wday}).")
       return
     end
 
-    # (C) Perform the overlap check
-    this_start = appointment_time
-    this_end   = this_start + new_duration.minutes
+    # Check single-day closures from the closed_days table:
+    if ClosedDay.exists?(date: appointment_time.to_date)
+      errors.add(:base, "The clinic is closed on #{appointment_time.to_date}.")
+    end
+  end
 
-    # Get other scheduled appts for the same dentist, excluding self
-    other_appointments = Appointment.where(dentist_id: dentist_id, status: 'scheduled')
-                                    .where.not(id: self.id)
-                                    .includes(:appointment_type)
+  def within_clinic_hours
+    setting = ClinicSetting.singleton
+    open_t  = setting.open_time   # "09:00"
+    close_t = setting.close_time  # "17:00"
+  
+    open_hour, open_min   = open_t.split(':').map(&:to_i)
+    close_hour, close_min = close_t.split(':').map(&:to_i)
+  
+    # Convert appointment_time to local time, if stored in UTC:
+    appt_local = appointment_time.in_time_zone(Rails.configuration.time_zone)
+  
+    # build local open_dt, close_dt
+    date_str = appt_local.strftime('%Y-%m-%d')
+    open_dt  = Time.zone.parse("#{date_str} #{open_hour}:#{open_min}")
+    close_dt = Time.zone.parse("#{date_str} #{close_hour}:#{close_min}")
+  
+    unless (appt_local >= open_dt && appt_local < close_dt)
+      errors.add(:base, "Appointment time must be between #{open_t} and #{close_t}.")
+    end
+  end
+  
 
-    other_appointments.each do |other|
-      other_duration = other.appointment_type&.duration || 30
-      other_start    = other.appointment_time
-      other_end      = other_start + other_duration.minutes
+  def dentist_not_unavailable
+    blocks = DentistUnavailability.where(dentist_id: dentist_id, date: appointment_time.to_date)
 
-      # Standard overlap check: (startA < endB) && (endA > startB)
-      if this_start < other_end && this_end > other_start
-        errors.add(:base, 'Dentist is already booked at that time.')
+    appointment_end = appointment_time + (appointment_type&.duration || 30).minutes
+    blocks.each do |block|
+      block_start = Time.parse("#{block.date} #{block.start_time}")
+      block_end   = Time.parse("#{block.date} #{block.end_time}")
+
+      if appointment_time < block_end && appointment_end > block_start
+        errors.add(:base, "Dentist is unavailable at that time.")
         break
       end
     end
   end
 
-  # ----------------------------------------------------------------------
-  # 2) Ensure Appointment Fits Entirely into the Dentist’s Available Window
-  # ----------------------------------------------------------------------
-  def fits_into_availability
-    return if appointment_time.blank?
+  def dentist_not_already_booked
+    appointment_end = appointment_time + (appointment_type&.duration || 30).minutes
 
-    day_index = appointment_time.wday
-    availability = DentistAvailability.find_by(
-      dentist_id: dentist_id,
-      day_of_week: day_index
-    )
+    overlapping = Appointment
+      .where(dentist_id: dentist_id, status: 'scheduled')
+      .where.not(id: id)
+      .where("appointment_time < ?", appointment_end)
+      .where("appointment_time + (COALESCE((SELECT duration FROM appointment_types WHERE id = appointment_type_id), 30) * interval '1 minute') > ?", appointment_time)
 
-    if availability.blank?
-      errors.add(:base, "Dentist is not available on that day.")
-      return
-    end
-
-    # Build the actual times for that date
-    day_str   = appointment_time.strftime('%Y-%m-%d') 
-    avl_start = Time.parse("#{day_str} #{availability.start_time}")
-    avl_end   = Time.parse("#{day_str} #{availability.end_time}")
-
-    duration_minutes = appointment_type&.duration || 30
-    this_start = appointment_time
-    this_end   = this_start + duration_minutes.minutes
-
-    # Ensure [this_start, this_end) is within [avl_start, avl_end)
-    if this_start < avl_start || this_end > avl_end
-      errors.add(:base, "Appointment extends beyond the dentist's available window.")
+    if overlapping.exists?
+      errors.add(:base, "Dentist already has an appointment overlapping that time.")
     end
   end
 end

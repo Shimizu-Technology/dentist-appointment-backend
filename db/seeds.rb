@@ -4,108 +4,111 @@ require 'faker'
 
 puts "Seeding data..."
 
+# Ensure we have a clinic setting row
+puts "Creating (or finding) ClinicSetting..."
+setting = ClinicSetting.singleton
+# e.g. open_time="09:00", close_time="17:00", open_days="1,2,3,4,5"
+
 # -------------------------------------------------------------------
-# Specialty
+# Specialties
 puts "Creating Specialties..."
-general_specialty   = Specialty.create!(name: "General Dentistry")
-pediatric_specialty = Specialty.create!(name: "Pediatric Dentistry")
-adult_specialty     = Specialty.create!(name: "Adult Dentistry")
+general_specialty   = Specialty.find_or_create_by!(name: "General Dentistry")
+pediatric_specialty = Specialty.find_or_create_by!(name: "Pediatric Dentistry")
+adult_specialty     = Specialty.find_or_create_by!(name: "Adult Dentistry")
 
 # -------------------------------------------------------------------
 # Dentists
 puts "Creating Dentists..."
-dentist1 = Dentist.create!(
+dentist1 = Dentist.find_or_create_by!(
   first_name: "Jane",
   last_name:  "Doe",
-  specialty:  adult_specialty,
-  image_url:  "https://images.unsplash.com/photo-1234...",
-  qualifications: "DDS from ABC University\n15+ years experience"
-)
+  specialty:  adult_specialty
+) do |d|
+  d.image_url      = "https://images.unsplash.com/photo-1234..."
+  d.qualifications = "DDS from ABC University\n15+ years experience"
+end
 
-dentist2 = Dentist.create!(
+dentist2 = Dentist.find_or_create_by!(
   first_name: "Joe",
   last_name:  "Kiddo",
-  specialty:  pediatric_specialty,
-  image_url:  "https://images.unsplash.com/photo-5678...",
-  qualifications: "DMD from XYZ University\nCertified Pediatric Dentist"
-)
+  specialty:  pediatric_specialty
+) do |d|
+  d.image_url      = "https://images.unsplash.com/photo-5678..."
+  d.qualifications = "DMD from XYZ University\nCertified Pediatric Dentist"
+end
 
-dentist3 = Dentist.create!(
+dentist3 = Dentist.find_or_create_by!(
   first_name: "Mary",
   last_name:  "Smith",
-  specialty:  general_specialty,
-  image_url:  "https://images.unsplash.com/photo-9876...",
-  qualifications: "DDS from State University\n10+ years experience"
-)
+  specialty:  general_specialty
+) do |d|
+  d.image_url      = "https://images.unsplash.com/photo-9876..."
+  d.qualifications = "DDS from State University\n10+ years experience"
+end
+
+dentists = [dentist1, dentist2, dentist3]
 
 # -------------------------------------------------------------------
 # Appointment Types
 puts "Creating Appointment Types..."
-cleaning_type = AppointmentType.create!(
-  name: "Cleaning",
-  description: "Routine cleaning",
-  duration: 30
-)
+cleaning_type = AppointmentType.find_or_create_by!(name: "Cleaning") do |t|
+  t.description = "Routine cleaning"
+  t.duration    = 30
+end
 
-filling_type = AppointmentType.create!(
-  name: "Filling",
-  description: "Cavity filling",
-  duration: 45
-)
+filling_type = AppointmentType.find_or_create_by!(name: "Filling") do |t|
+  t.description = "Cavity filling"
+  t.duration    = 45
+end
 
-checkup_type = AppointmentType.create!(
-  name: "Checkup",
-  description: "General checkup",
-  duration: 20
-)
+checkup_type = AppointmentType.find_or_create_by!(name: "Checkup") do |t|
+  t.description = "General checkup"
+  t.duration    = 20
+end
 
-whitening_type = AppointmentType.create!(
-  name: "Teeth Whitening",
-  description: "Professional whitening treatment",
-  duration: 60
-)
+whitening_type = AppointmentType.find_or_create_by!(name: "Teeth Whitening") do |t|
+  t.description = "Professional whitening treatment"
+  t.duration    = 60
+end
 
 appointment_types = [cleaning_type, filling_type, checkup_type, whitening_type]
-dentists          = [dentist1, dentist2, dentist3]
 
 # -------------------------------------------------------------------
 # Guaranteed Admin user
-puts "Creating guaranteed admin@example.com account..."
-User.create!(
-  email: "admin@example.com",
-  password: "password",
-  role: "admin",
-  provider_name: "Delta Dental",
-  policy_number: "AAA111",
-  plan_type: "PPO",
-  phone: "555-0001",
-  first_name: "Adminy",
-  last_name: "Example"
-)
+puts "Creating admin@example.com..."
+User.find_or_create_by!(email: "admin@example.com") do |u|
+  u.password      = "password"
+  u.role          = "admin"
+  u.provider_name = "Delta Dental"
+  u.policy_number = "AAA111"
+  u.plan_type     = "PPO"
+  u.phone         = "555-0001"
+  u.first_name    = "Adminy"
+  u.last_name     = "Example"
+end
 
 # -------------------------------------------------------------------
 # Guaranteed Regular user
-puts "Creating guaranteed user@example.com account..."
-User.create!(
-  email: "user@example.com",
-  password: "password",
-  role: "user",
-  provider_name: "Guardian",
-  policy_number: "BBB222",
-  plan_type: "HMO",
-  phone: "555-0002",
-  first_name: "Regular",
-  last_name: "User"
-)
+puts "Creating user@example.com..."
+User.find_or_create_by!(email: "user@example.com") do |u|
+  u.password      = "password"
+  u.role          = "user"
+  u.provider_name = "Guardian"
+  u.policy_number = "BBB222"
+  u.plan_type     = "HMO"
+  u.phone         = "555-0002"
+  u.first_name    = "Regular"
+  u.last_name     = "User"
+end
 
 # -------------------------------------------------------------------
-# Admin Users
-puts "Creating 10 Random Admin Users..."
+# 10 more Admin
+puts "Creating 10 random Admin Users..."
 10.times do
   User.create!(
-    email:       Faker::Internet.unique.email,
-    password:    "password",  # default password
-    role:        "admin",
+    email:         Faker::Internet.unique.email,
+    password:      "password",
+    role:          "admin",
     provider_name: Faker::Company.name,
     policy_number: Faker::Alphanumeric.alpha(number: 5).upcase,
     plan_type:     ["PPO", "HMO", "POS"].sample,
@@ -116,14 +119,14 @@ puts "Creating 10 Random Admin Users..."
 end
 
 # -------------------------------------------------------------------
-# Regular Users (Parents)
+# 200 Regular
 puts "Creating 200 Random Regular Users..."
 users = []
 200.times do
   user = User.create!(
-    email:       Faker::Internet.unique.email,
-    password:    "password",
-    role:        "user",
+    email:         Faker::Internet.unique.email,
+    password:      "password",
+    role:          "user",
     provider_name: Faker::Company.name,
     policy_number: Faker::Alphanumeric.alpha(number: 5).upcase,
     plan_type:     ["PPO", "HMO", "POS"].sample,
@@ -135,85 +138,102 @@ users = []
 end
 
 # -------------------------------------------------------------------
-# Create Dependents (2 to 4 for each user)
-puts "Creating Dependents for each user..."
+# Dependents
+puts "Creating Dependents..."
 users.each do |user|
   rand(2..4).times do
     user.dependents.create!(
       first_name:    Faker::Name.first_name,
-      last_name:     user.last_name,  
+      last_name:     user.last_name,
       date_of_birth: Faker::Date.birthday(min_age: 1, max_age: 17)
     )
   end
 end
 
 # -------------------------------------------------------------------
-# DentistAvailabilities for each dentist
-puts "Creating Dentist Availabilities..."
-# Dentist 1:
-DentistAvailability.create!(dentist: dentist1, day_of_week: 1, start_time: "09:00", end_time: "17:00") # Mon
-DentistAvailability.create!(dentist: dentist1, day_of_week: 2, start_time: "09:00", end_time: "17:00") # Tue
-DentistAvailability.create!(dentist: dentist1, day_of_week: 3, start_time: "09:00", end_time: "17:00") # Wed
-DentistAvailability.create!(dentist: dentist1, day_of_week: 4, start_time: "09:00", end_time: "17:00") # Thu
-DentistAvailability.create!(dentist: dentist1, day_of_week: 5, start_time: "09:00", end_time: "15:00") # Fri
+# Global closed days
+puts "Creating example closed days..."
+ClosedDay.create!(date: Date.current + 200, reason: "Staff Training")
+ClosedDay.create!(date: Date.current + 300, reason: "Holiday")
 
-# Dentist 2:
-DentistAvailability.create!(dentist: dentist2, day_of_week: 1, start_time: "10:00", end_time: "18:00") # Mon
-DentistAvailability.create!(dentist: dentist2, day_of_week: 2, start_time: "10:00", end_time: "18:00") # Tue
-DentistAvailability.create!(dentist: dentist2, day_of_week: 4, start_time: "10:00", end_time: "18:00") # Thu
-DentistAvailability.create!(dentist: dentist2, day_of_week: 5, start_time: "10:00", end_time: "16:00") # Fri
+# -------------------------------------------------------------------
+# Dentist Unavailabilities
+puts "Creating random dentist unavailabilities..."
+Dentist.all.each do |dentist|
+  2.times do
+    date_offset = rand(150..180)
+    date_obj    = Date.current + date_offset
 
-# Dentist 3:
-DentistAvailability.create!(dentist: dentist3, day_of_week: 1, start_time: "08:00", end_time: "16:00") # Mon
-DentistAvailability.create!(dentist: dentist3, day_of_week: 2, start_time: "08:00", end_time: "16:00") # Tue
-DentistAvailability.create!(dentist: dentist3, day_of_week: 3, start_time: "12:00", end_time: "20:00") # Wed
-DentistAvailability.create!(dentist: dentist3, day_of_week: 4, start_time: "08:00", end_time: "16:00") # Thu
-DentistAvailability.create!(dentist: dentist3, day_of_week: 5, start_time: "09:00", end_time: "12:00") # Fri
+    # skip if globally closed
+    next if ClosedDay.exists?(date: date_obj)
+
+    # skip if day not in open_days
+    open_days = setting.open_days.split(',').map(&:to_i)
+    wday = date_obj.wday
+    next unless open_days.include?(wday)
+
+    # 2-hour block
+    start_hr = [9, 10, 12, 13, 14].sample
+    end_hr   = start_hr + 2
+
+    DentistUnavailability.create!(
+      dentist_id: dentist.id,
+      date:       date_obj,
+      start_time: format('%02d:00', start_hr),
+      end_time:   format('%02d:00', end_hr)
+    )
+  end
+end
 
 # -------------------------------------------------------------------
 # Appointments
-puts "Creating random Appointments..."
-
-def random_weekday_future_time(days_in_future = 90)
-  loop do
-    day_offset = rand(1..days_in_future)
-    hour       = rand(8..17)
-    date       = Faker::Time.forward(days: day_offset, period: :day).change(hour: hour)
-    # skip weekends
-    unless date.saturday? || date.sunday?
-      return date
-    end
-  end
-end
-
-def random_weekday_past_time(days_in_past = 90)
-  loop do
-    day_offset = rand(1..days_in_past)
-    hour       = rand(8..17)
-    date       = Faker::Time.backward(days: day_offset, period: :day).change(hour: hour)
-    # skip weekends
-    unless date.saturday? || date.sunday?
-      return date
-    end
-  end
-end
+puts "Creating random appointments..."
 
 status_options = %w[scheduled completed cancelled]
+users_with_dependents = users.select { |u| u.dependents.any? }
 
-users.each do |user|
-  user_dependents = user.dependents
-  next if user_dependents.empty?
+open_days = setting.open_days.split(',').map(&:to_i)
+open_h, open_m   = setting.open_time.split(':').map(&:to_i) # e.g. [9,0]
+close_h, close_m = setting.close_time.split(':').map(&:to_i) # e.g. [17,0]
 
+def random_appointment_time_in_open_hours(open_days, open_h, close_h, past: false)
+  loop do
+    offset = rand(1..90)
+    base_date = past ? Time.current.to_date - offset : Time.current.to_date + offset
+
+    # skip if wday not in open_days
+    wday = base_date.wday
+    next unless open_days.include?(wday)
+
+    # skip if closed day
+    next if ClosedDay.exists?(date: base_date)
+
+    # pick hour in [open_h..close_h-1]
+    hour   = rand(open_h..(close_h - 1))
+    minute = rand(0..59)
+
+    # Build local time
+    return Time.zone.local(base_date.year, base_date.month, base_date.day, hour, minute, 0)
+  end
+end
+
+users_with_dependents.each do |user|
   rand(0..5).times do
-    # 50% future, 50% past
-    apt_time   = [true, false].sample ? random_weekday_future_time : random_weekday_past_time
+    apt_time = if [true, false].sample
+                 # future
+                 random_appointment_time_in_open_hours(open_days, open_h, close_h, past: false)
+               else
+                 # past
+                 random_appointment_time_in_open_hours(open_days, open_h, close_h, past: true)
+               end
+
     apt_status = status_options.sample
     appt_type  = appointment_types.sample
 
     begin
       Appointment.create!(
         user:             user,
-        dependent:        user_dependents.sample,
+        dependent:        user.dependents.sample,
         dentist:          dentists.sample,
         appointment_type: appt_type,
         appointment_time: apt_time,
@@ -235,5 +255,6 @@ puts " - Regular Users: #{User.where(role: 'user').count}"
 puts " - Dependents: #{Dependent.count}"
 puts " - AppointmentTypes: #{AppointmentType.count}"
 puts " - Appointments: #{Appointment.count}"
-puts " - DentistAvailabilities: #{DentistAvailability.count}"
+puts " - DentistUnavailabilities: #{DentistUnavailability.count}"
 puts " - Specialties: #{Specialty.count}"
+puts " - ClosedDays: #{ClosedDay.count}"

@@ -1,4 +1,5 @@
 # app/controllers/api/v1/dentists_controller.rb
+
 module Api
   module V1
     class DentistsController < BaseController
@@ -6,7 +7,7 @@ module Api
 
       # GET /api/v1/dentists
       def index
-        # Include the specialty to avoid N+1 queries
+        # Include specialty to avoid N+1 queries
         dentists = Dentist.includes(:specialty).all
         render json: dentists.map { |d| dentist_to_camel(d) }, status: :ok
       end
@@ -18,19 +19,25 @@ module Api
       end
 
       # GET /api/v1/dentists/:id/availabilities
+      #
+      # In your front end, you’re calling `/dentists/:id/availabilities`.
+      # But your DB table is “dentist_unavailabilities.” So here, we interpret
+      # them as “the dentist is UNavailable at these times/dates” and return them.
+      #
+      # If you truly want an “available” schedule, you’d do the inverse. For now,
+      # we’ll just return `dentist_unavailabilities` in a JSON array.
       def availabilities
         dentist = Dentist.find(params[:id])
-        availability = dentist.dentist_availabilities.order(:day_of_week)
+        unavailabilities = dentist.dentist_unavailabilities.order(:date, :start_time)
 
-        # Convert availability records to expected JSON
-        render json: availability.map { |a| availability_to_camel(a) }, status: :ok
+        # Convert them to JSON
+        render json: unavailabilities.map { |u| unavailability_to_camel(u) }, status: :ok
       end
 
       # POST /api/v1/dentists (admin only)
       def create
         return not_admin unless current_user.admin?
 
-        # Note: param :specialty_id references the Specialty record
         dentist = Dentist.new(dentist_params)
         if dentist.save
           render json: dentist_to_camel(dentist), status: :created
@@ -63,20 +70,11 @@ module Api
       private
 
       def dentist_params
-        # If your front-end sends something like:
-        # {
-        #   "dentist": {
-        #     "first_name": "...",
-        #     "last_name": "...",
-        #     "specialty_id": 3,
-        #     "image_url": "http://...",
-        #     "qualifications": "Line1\nLine2"
-        #   }
-        # }
         params.require(:dentist).permit(
           :first_name, :last_name,
           :specialty_id,
-          :image_url, :qualifications
+          :image_url,
+          :qualifications
         )
       end
 
@@ -89,13 +87,7 @@ module Api
           id: d.id,
           firstName: d.first_name,
           lastName: d.last_name,
-          # If you store the specialty's name:
           specialty: d.specialty&.name,
-          # or specialty object:
-          # specialty: d.specialty && {
-          #   id: d.specialty.id,
-          #   name: d.specialty.name
-          # },
           imageUrl: d.image_url,
           qualifications: d.qualifications ? d.qualifications.split("\n") : [],
           createdAt: d.created_at.iso8601,
@@ -103,14 +95,17 @@ module Api
         }
       end
 
-      def availability_to_camel(avail)
+      # Convert a DentistUnavailability record to JSON in “camelCase” style
+      def unavailability_to_camel(u)
         {
-          dentistId: avail.dentist_id,
-          dayOfWeek: avail.day_of_week,
-          startTime: avail.start_time,
-          endTime: avail.end_time
+          id:        u.id,
+          dentistId: u.dentist_id,
+          date:      u.date.to_s,
+          startTime: u.start_time,
+          endTime:   u.end_time,
+          reason:    u.reason
         }
-      end
+      end      
     end
   end
 end

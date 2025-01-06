@@ -97,47 +97,47 @@ module Api
         dentist_id = params[:dentist_id]
         date_str   = params[:date]
         ignore_id  = params[:ignore_id].presence
-      
-        # NEW: Check if day is globally closed
+
+        # Check if day is globally closed
         if ClosedDay.exists?(date: date_str)
           return render json: {
             appointments: [],
-            closedDay: true, # or any extra info you like
+            closedDay: true,  # or any extra info you like
             message: "This day (#{date_str}) is globally closed."
           }, status: :ok
         end
-      
+
         if dentist_id.blank? || date_str.blank?
           return render json: { error: "Missing dentist_id or date" }, status: :unprocessable_entity
         end
-      
+
         date_obj = Date.parse(date_str) rescue nil
         unless date_obj
           return render json: { error: "Invalid date format" }, status: :unprocessable_entity
         end
-      
+
         start_of_day = date_obj.beginning_of_day
         end_of_day   = date_obj.end_of_day
-      
+
         appts = Appointment.includes(:appointment_type)
                            .where(dentist_id: dentist_id)
                            .where(appointment_time: start_of_day..end_of_day)
                            .order(:appointment_time)
-      
+
         # Exclude the appointment we’re editing, if provided
         appts = appts.where.not(id: ignore_id) if ignore_id
-      
+
         results = appts.map do |appt|
           {
-            id: appt.id,
+            id:             appt.id,
             appointmentTime: appt.appointment_time.iso8601,
-            duration: appt.appointment_type&.duration || 30,
-            status: appt.status
+            duration:       appt.appointment_type&.duration || 30,
+            status:         appt.status
           }
         end
-      
+
         render json: { appointments: results }, status: :ok
-      end      
+      end
 
       private
 

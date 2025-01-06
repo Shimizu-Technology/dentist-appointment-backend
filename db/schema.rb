@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_01_04_045356) do
+ActiveRecord::Schema[7.2].define(version: 2025_01_06_013614) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -54,14 +54,15 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_04_045356) do
     t.index ["date"], name: "index_closed_days_on_date", unique: true
   end
 
-  create_table "dentist_availabilities", force: :cascade do |t|
+  create_table "dentist_unavailabilities", force: :cascade do |t|
     t.bigint "dentist_id", null: false
-    t.integer "day_of_week", null: false
     t.string "start_time", null: false
     t.string "end_time", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["dentist_id"], name: "index_dentist_availabilities_on_dentist_id"
+    t.date "date", null: false
+    t.string "reason"
+    t.index ["dentist_id"], name: "index_dentist_unavailabilities_on_dentist_id"
   end
 
   create_table "dentists", force: :cascade do |t|
@@ -110,7 +111,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_04_045356) do
   add_foreign_key "appointments", "dentists"
   add_foreign_key "appointments", "dependents"
   add_foreign_key "appointments", "users"
-  add_foreign_key "dentist_availabilities", "dentists"
+  add_foreign_key "dentist_unavailabilities", "dentists"
   add_foreign_key "dentists", "specialties"
   add_foreign_key "dependents", "users"
 end

@@ -1,3 +1,5 @@
+# File: config/routes.rb
+
 Rails.application.routes.draw do
   namespace :api do
     namespace :v1 do
@@ -28,11 +30,11 @@ Rails.application.routes.draw do
       # Users (admin can see index, etc.)
       resources :users, only: [:create, :index] do
         collection do
-          patch :current       # update current user
-          get :search          # search users
+          patch :current   # update current user
+          get :search      # search users
         end
         member do
-          patch :promote       # promote user to admin
+          patch :promote   # promote user to admin
         end
       end
 
@@ -42,7 +44,8 @@ Rails.application.routes.draw do
       # Schedules => single resource (singular)
       resource :schedule, only: [:show, :update], controller: :schedules
 
-      resources :dentist_availabilities, only: [:create, :update, :destroy]
+      # DentistUnavailabilities
+      resources :dentist_unavailabilities, only: [:create, :update, :destroy]
     end
   end
 end

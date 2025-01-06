@@ -17,6 +17,8 @@ module DentistAppointmentBackend
   class Application < Rails::Application
     config.load_defaults 7.2
 
+    config.time_zone = "Pacific/Guam"
+
     # ...
   end
 end
