@@ -15,6 +15,11 @@ module Api
                                    .where(user_id: current_user.id)
         end
 
+        # NEW: If we have a dentist_id, filter by that.
+        if params[:dentist_id].present?
+          base_scope = base_scope.where(dentist_id: params[:dentist_id])
+        end
+
         page     = (params[:page].presence || 1).to_i
         per_page = (params[:per_page].presence || 10).to_i
 
@@ -102,7 +107,7 @@ module Api
         if ClosedDay.exists?(date: date_str)
           return render json: {
             appointments: [],
-            closedDay: true,  # or any extra info you like
+            closedDay: true,
             message: "This day (#{date_str}) is globally closed."
           }, status: :ok
         end
@@ -129,10 +134,10 @@ module Api
 
         results = appts.map do |appt|
           {
-            id:             appt.id,
+            id:              appt.id,
             appointmentTime: appt.appointment_time.iso8601,
-            duration:       appt.appointment_type&.duration || 30,
-            status:         appt.status
+            duration:        appt.appointment_type&.duration || 30,
+            status:          appt.status
           }
         end
 
@@ -185,10 +190,10 @@ module Api
           },
 
           dentist: appt.dentist && {
-            id:         appt.dentist.id,
-            firstName:  appt.dentist.first_name,
-            lastName:   appt.dentist.last_name,
-            specialty:  appt.dentist.specialty
+            id:        appt.dentist.id,
+            firstName: appt.dentist.first_name,
+            lastName:  appt.dentist.last_name,
+            specialty: appt.dentist.specialty
           },
           appointmentType: appt.appointment_type && {
             id:          appt.appointment_type.id,
