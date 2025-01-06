@@ -189,45 +189,54 @@ end
 # Appointments
 puts "Creating random appointments..."
 
-status_options = %w[scheduled completed cancelled]
+# No scheduled in the past:
+#   - Past => %w[completed cancelled]
+#   - Future => %w[scheduled cancelled]
+PAST_STATUSES   = %w[completed cancelled].freeze
+FUTURE_STATUSES = %w[scheduled cancelled].freeze
+
 users_with_dependents = users.select { |u| u.dependents.any? }
 
 open_days = setting.open_days.split(',').map(&:to_i)
-open_h, open_m   = setting.open_time.split(':').map(&:to_i) # e.g. [9,0]
-close_h, close_m = setting.close_time.split(':').map(&:to_i) # e.g. [17,0]
+open_h, _open_m   = setting.open_time.split(':').map(&:to_i) # e.g. [9,0]
+close_h, _close_m = setting.close_time.split(':').map(&:to_i) # e.g. [17,0]
 
-def random_appointment_time_in_open_hours(open_days, open_h, close_h, past: false)
+# Only these minute increments
+MINUTE_INCREMENTS = [0, 15, 30, 45]
+
+def random_appointment_time_in_open_hours(open_days, open_h, close_h, in_future: false)
+  # offset range: pick from [1..90] days in past or future
+  offset = rand(1..90)
+  base_date = in_future ? Time.current.to_date + offset : Time.current.to_date - offset
+
   loop do
-    offset = rand(1..90)
-    base_date = past ? Time.current.to_date - offset : Time.current.to_date + offset
-
-    # skip if wday not in open_days
     wday = base_date.wday
-    next unless open_days.include?(wday)
+    # If wday not open or day is closed, try again
+    unless open_days.include?(wday) && !ClosedDay.exists?(date: base_date)
+      # increment or decrement the date to find next possible day
+      base_date = in_future ? (base_date + 1) : (base_date - 1)
+      next
+    end
 
-    # skip if closed day
-    next if ClosedDay.exists?(date: base_date)
-
-    # pick hour in [open_h..close_h-1]
     hour   = rand(open_h..(close_h - 1))
-    minute = rand(0..59)
+    minute = MINUTE_INCREMENTS.sample
 
-    # Build local time
     return Time.zone.local(base_date.year, base_date.month, base_date.day, hour, minute, 0)
   end
 end
 
 users_with_dependents.each do |user|
+  # anywhere from 0..5 appointments
   rand(0..5).times do
-    apt_time = if [true, false].sample
-                 # future
-                 random_appointment_time_in_open_hours(open_days, open_h, close_h, past: false)
-               else
-                 # past
-                 random_appointment_time_in_open_hours(open_days, open_h, close_h, past: true)
-               end
+    # 50/50 chance of future vs. past
+    is_future = [true, false].sample
 
-    apt_status = status_options.sample
+    # Generate a random time
+    apt_time = random_appointment_time_in_open_hours(open_days, open_h, close_h, in_future: is_future)
+
+    # Pick appropriate statuses
+    apt_status = is_future ? FUTURE_STATUSES.sample : PAST_STATUSES.sample
+
     appt_type  = appointment_types.sample
 
     begin
