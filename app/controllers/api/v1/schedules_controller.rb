@@ -2,8 +2,6 @@
 module Api
   module V1
     class SchedulesController < BaseController
-      before_action :require_admin!
-
       # GET /api/v1/schedule
       def show
         setting = ClinicSetting.singleton

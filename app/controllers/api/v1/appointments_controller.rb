@@ -15,7 +15,7 @@ module Api
                                    .where(user_id: current_user.id)
         end
 
-        # NEW: If we have a dentist_id, filter by that.
+        # Optional: Filter by dentist_id
         if params[:dentist_id].present?
           base_scope = base_scope.where(dentist_id: params[:dentist_id])
         end
@@ -38,6 +38,7 @@ module Api
 
       # POST /api/v1/appointments
       def create
+        # If admin and user_id is passed, create for that user. Otherwise, for current_user.
         chosen_user_id = if current_user.admin? && appointment_params[:user_id].present?
                            appointment_params[:user_id]
                          else
@@ -49,7 +50,7 @@ module Api
           dentist_id:          appointment_params[:dentist_id],
           appointment_type_id: appointment_params[:appointment_type_id],
           appointment_time:    appointment_params[:appointment_time],
-          dependent_id:        appointment_params[:dependent_id],
+          dependent_id:        appointment_params[:dependent_id], # could be nil if "self"
           status:              appointment_params[:status],
           notes:               appointment_params[:notes]
         )
@@ -65,6 +66,7 @@ module Api
       def show
         appointment = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
                                  .find(params[:id])
+
         unless current_user.admin? || appointment.user_id == current_user.id
           return render json: { error: "Not authorized" }, status: :forbidden
         end
@@ -75,6 +77,7 @@ module Api
       # PATCH/PUT /api/v1/appointments/:id
       def update
         appointment = Appointment.find(params[:id])
+
         unless current_user.admin? || appointment.user_id == current_user.id
           return render json: { error: "Not authorized" }, status: :forbidden
         end
@@ -89,6 +92,7 @@ module Api
       # DELETE /api/v1/appointments/:id
       def destroy
         appointment = Appointment.find(params[:id])
+
         unless current_user.admin? || appointment.user_id == current_user.id
           return render json: { error: "Not authorized" }, status: :forbidden
         end
@@ -163,7 +167,7 @@ module Api
           id:                appt.id,
           userId:            appt.user_id,
           userName:          appt.user ? "#{appt.user.first_name} #{appt.user.last_name}" : nil,
-          userEmail:         appt.user ? appt.user.email : nil,
+          userEmail:         appt.user&.email,
           dependentId:       appt.dependent_id,
           dentistId:         appt.dentist_id,
           appointmentTypeId: appt.appointment_type_id,
