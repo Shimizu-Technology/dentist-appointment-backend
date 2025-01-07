@@ -6,18 +6,28 @@ module Api
 
       # GET /api/v1/appointments
       def index
+        # (1) Decide the base_scope depending on admin vs. regular user,
+        #     plus the optional user_id=me for admins
         if current_user.admin?
-          base_scope = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
+          if params[:user_id] == 'me'
+            # Admin specifically requested only their own appointments
+            base_scope = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
+                                     .where(user_id: current_user.id)
+          else
+            # Admin sees ALL by default
+            base_scope = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
+          end
         else
+          # Regular user => only their own appointments
           base_scope = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
                                    .where(user_id: current_user.id)
         end
 
-        # 1) Search filter
+        # 1) Optional search filter by user name/email/id
         if params[:q].present?
           search = params[:q].to_s.strip.downcase
           base_scope = base_scope.joins(:user).where(
-            "LOWER(users.first_name) LIKE :s OR LOWER(users.last_name) LIKE :s 
+            "LOWER(users.first_name) LIKE :s OR LOWER(users.last_name) LIKE :s
              OR LOWER(users.email) LIKE :s OR CAST(users.id AS TEXT) = :exact_s",
             s: "%#{search}%", exact_s: search
           )

@@ -1,4 +1,5 @@
-# app/models/appointment.rb
+# File: app/models/appointment.rb
+
 class Appointment < ApplicationRecord
   belongs_to :user
   belongs_to :dentist
@@ -6,6 +7,7 @@ class Appointment < ApplicationRecord
   belongs_to :dependent, optional: true
 
   before_create :set_default_status
+  before_create :default_checked_in  # <-- NEW callback to ensure checked_in = false if nil
 
   validate :clinic_not_closed_on_this_date
   validate :within_clinic_hours
@@ -16,6 +18,11 @@ class Appointment < ApplicationRecord
 
   def set_default_status
     self.status ||= 'scheduled'
+  end
+
+  # Ensure checked_in is never nil (PG constraint requires NOT NULL).
+  def default_checked_in
+    self.checked_in = false if checked_in.nil?
   end
 
   # -------------------------------------------
@@ -32,7 +39,6 @@ class Appointment < ApplicationRecord
     # 0=Sunday, 1=Monday, 2=Tuesday, ...
     wday = appointment_time.wday
 
-    # if wday not in the array of open days, fail
     unless open_days.include?(wday)
       errors.add(:base, "Clinic is closed on that day (wday=#{wday}).")
       return
@@ -48,28 +54,27 @@ class Appointment < ApplicationRecord
     setting = ClinicSetting.singleton
     open_t  = setting.open_time   # "09:00"
     close_t = setting.close_time  # "17:00"
-  
+
     open_hour, open_min   = open_t.split(':').map(&:to_i)
     close_hour, close_min = close_t.split(':').map(&:to_i)
-  
+
     # Convert appointment_time to local time, if stored in UTC:
     appt_local = appointment_time.in_time_zone(Rails.configuration.time_zone)
-  
+
     # build local open_dt, close_dt
     date_str = appt_local.strftime('%Y-%m-%d')
     open_dt  = Time.zone.parse("#{date_str} #{open_hour}:#{open_min}")
     close_dt = Time.zone.parse("#{date_str} #{close_hour}:#{close_min}")
-  
+
     unless (appt_local >= open_dt && appt_local < close_dt)
       errors.add(:base, "Appointment time must be between #{open_t} and #{close_t}.")
     end
   end
-  
 
   def dentist_not_unavailable
     blocks = DentistUnavailability.where(dentist_id: dentist_id, date: appointment_time.to_date)
-
     appointment_end = appointment_time + (appointment_type&.duration || 30).minutes
+
     blocks.each do |block|
       block_start = Time.parse("#{block.date} #{block.start_time}")
       block_end   = Time.parse("#{block.date} #{block.end_time}")
