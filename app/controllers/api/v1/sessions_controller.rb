@@ -21,8 +21,8 @@ module Api
           id: u.id,
           email: u.email,
           role: u.role,
-          firstName: u.first_name,    # if you store in user table
-          lastName: u.last_name,      # if you store in user table
+          firstName: u.first_name,
+          lastName: u.last_name,
           phone: u.phone,
           insuranceInfo: u.provider_name ? {
             providerName: u.provider_name,

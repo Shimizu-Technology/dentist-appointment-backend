@@ -26,10 +26,34 @@ module Api
         }, status: :ok
       end
 
-      # POST /api/v1/users (Sign up; or admin can create a user)
+      # POST /api/v1/users
       def create
+        # Non-admin can't set role=admin
+        # They can still set role=phone_only
         user = User.new(user_params_for_create)
+
+        # If phone_only user => skip password if blank (auto-generate a dummy password),
+        # otherwise ensure we have *some* password, but do NOT show it to the admin.
+        if user.phone_only? && user.password_digest.blank?
+          user.password = SecureRandom.hex(8)  # just to pass validation
+        else
+          # If a normal user omitted password, generate one and require a reset.
+          if user.password_digest.blank?
+            temp_pass = SecureRandom.hex(8)
+            user.password = temp_pass
+            user.force_password_reset = true  # so they must change it on first login
+          end
+        end
+
+        # If a normal user tries to create role=admin => override it to 'user'
+        if !current_user&.admin? && user.role == 'admin'
+          user.role = 'user'
+        end
+
         if user.save
+          # Send an email to the user (if user has an email and is not phone_only)
+          AdminUserMailer.welcome_user(user).deliver_later unless user.phone_only?
+
           token = JWT.encode({ user_id: user.id }, Rails.application.credentials.secret_key_base)
           render json: { jwt: token, user: user_to_camel(user) }, status: :created
         else
@@ -37,7 +61,7 @@ module Api
         end
       end
 
-      # PATCH /api/v1/users/current (Update the currently logged-in user)
+      # PATCH /api/v1/users/current
       def current
         unless @current_user
           return render json: { error: 'Unauthorized' }, status: :unauthorized
@@ -50,7 +74,7 @@ module Api
         end
       end
 
-      # PATCH /api/v1/users/:id/promote (Admin-only)
+      # PATCH /api/v1/users/:id/promote
       def promote
         return not_admin unless current_user.admin?
 
@@ -62,8 +86,7 @@ module Api
         end
       end
 
-      # GET /api/v1/users/search?q=...&page=...&per_page=...
-      # Admin-only search by firstName, lastName, or email. Paginated.
+      # GET /api/v1/users/search?q=...
       def search
         return not_admin unless current_user.admin?
 
@@ -72,7 +95,6 @@ module Api
         per_page = (params[:per_page].presence || 10).to_i
 
         if query.blank?
-          # If nothing typed, return empty or you could default to all
           return render json: {
             users: [],
             meta: {
@@ -105,16 +127,12 @@ module Api
       private
 
       def user_params_for_create
-        attrs = params.require(:user).permit(
-          :email, :password, :phone, :provider_name,
-          :policy_number, :plan_type, :first_name,
-          :last_name, :role
+        # allow phone, first_name, last_name, role, password, email, etc.
+        params.require(:user).permit(
+          :email, :password, :phone,
+          :provider_name, :policy_number, :plan_type,
+          :first_name, :last_name, :role
         )
-        # If non-admin tries to set role=admin, override to user
-        if !current_user&.admin? || attrs[:role] != 'admin'
-          attrs[:role] = 'user'
-        end
-        attrs
       end
 
       def user_update_params
@@ -123,17 +141,18 @@ module Api
 
       def user_to_camel(u)
         {
-          id:          u.id,
-          email:       u.email,
-          role:        u.role,
-          firstName:   u.first_name,
-          lastName:    u.last_name,
-          phone:       u.phone,
+          id: u.id,
+          email: u.email,
+          role: u.role,
+          firstName: u.first_name,
+          lastName: u.last_name,
+          phone: u.phone,
           insuranceInfo: u.provider_name ? {
             providerName: u.provider_name,
             policyNumber: u.policy_number,
-            planType:     u.plan_type
-          } : nil
+            planType: u.plan_type
+          } : nil,
+          forcePasswordReset: u.force_password_reset
         }
       end
 
