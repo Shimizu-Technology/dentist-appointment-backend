@@ -72,31 +72,32 @@ module Api
       # ----------------------------------------------------------
       def upload_image
         return not_admin unless current_user.admin?
-
+      
         dentist = Dentist.find(params[:id])
         file = params[:image]
         unless file
           return render json: { error: "No image file uploaded" }, status: :unprocessable_entity
         end
-
-        # Decide on a filename & path in public/uploads/dentists/
+      
+        # If there's an old S3 file, delete it
+        if dentist.image_url.present?
+          old_filename = dentist.image_url.split('/').last
+          S3Uploader.delete(old_filename)
+        end
+      
+        # Build the new filename
         original_filename = file.original_filename
         ext = File.extname(original_filename)
         new_filename = "dentist_#{dentist.id}_#{Time.now.to_i}#{ext}"
-
-        upload_dir = Rails.root.join("public", "uploads", "dentists")
-        FileUtils.mkdir_p(upload_dir) unless File.directory?(upload_dir)
-
-        file_path = File.join(upload_dir, new_filename)
-
-        # Write the file
-        File.open(file_path, "wb") { |f| f.write(file.read) }
-
-        # Update dentist’s image_url with the relative path
-        dentist.update!(image_url: "/uploads/dentists/#{new_filename}")
-
+      
+        # Upload to S3
+        s3_url = S3Uploader.upload(file, new_filename)
+      
+        # Save to the DB
+        dentist.update!(image_url: s3_url)
+      
         render json: dentist_to_camel(dentist), status: :ok
-      end
+      end     
 
       private
 

@@ -29,9 +29,10 @@ This README provides setup instructions, usage examples, and endpoint documentat
    - [Appointment Types](#appointment-types)  
    - [Admin Endpoints](#admin-endpoints)  
    - [Users (Admin Only)](#users-admin-only)  
-7. [Environment Variables](#environment-variables)  
-8. [Deployment](#deployment)  
-9. [Future Enhancements / Next Steps](#future-enhancements--next-steps)
+7. [S3 Image Upload (Dentist Photos)](#s3-image-upload-dentist-photos)
+8. [Environment Variables](#environment-variables)  
+9. [Deployment](#deployment)  
+10. [Future Enhancements / Next Steps](#future-enhancements--next-steps)
 
 ---
 
@@ -290,11 +291,135 @@ We’ve also added routes to allow **admin** users to manage other user accounts
 
 ---
 
+## S3 Image Upload (Dentist Photos)
+
+We use a **custom S3 uploader** for dentist photos—**not** Active Storage. The flow is:
+
+1. **Dentist Photo** is uploaded via a `POST /api/v1/dentists/:id/upload_image` endpoint (admin-only).  
+2. We use an `S3Uploader` (in `app/services/s3_uploader.rb`) to:  
+   - Delete the old image if one exists  
+   - Upload the new file to S3  
+   - Store the resulting S3 URL in `dentists.image_url`  
+
+### AWS Credentials & Environment Variables
+
+Make sure you **set** the following in your `.env` or environment config:
+
+```bash
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=ap-southeast-2  # or whatever your region is
+S3_BUCKET_NAME=dentist-images
+```
+
+### Bucket Policy for Public Access
+
+Because our S3 bucket has **Object Ownership = Bucket owner enforced**, ACL-based public reads (like `acl: 'public-read'`) are **ignored**. To actually allow the images to be loaded publicly, add a **bucket policy** (in the AWS Console under *Permissions -> Bucket Policy*) that grants `s3:GetObject` to everyone on all objects in the bucket:
+
+```jsonc
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowPublicReadForGetObject",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::dentist-images/*"
+    }
+  ]
+}
+```
+
+**Important**:
+- Replace `dentist-images` with your actual bucket name.
+- Ensure “Block Public Access” is **off** at least for “Bucket policies.”  
+- With this policy, any uploaded images become publicly viewable at their S3 URL.
+
+### S3Uploader
+
+Our `app/services/s3_uploader.rb` might look like this:
+
+```ruby
+# app/services/s3_uploader.rb
+require 'aws-sdk-s3'
+
+class S3Uploader
+  def self.upload(file, filename)
+    s3 = Aws::S3::Resource.new(
+      region: ENV['AWS_REGION'],
+      credentials: Aws::Credentials.new(
+        ENV['AWS_ACCESS_KEY_ID'],
+        ENV['AWS_SECRET_ACCESS_KEY']
+      )
+    )
+
+    obj = s3.bucket(ENV['S3_BUCKET_NAME']).object(filename)
+    # ACL is effectively ignored if “bucket owner enforced,” but we keep it:
+    obj.upload_file(file.path, acl: 'public-read')
+    obj.public_url
+  end
+
+  def self.delete(old_filename)
+    s3 = Aws::S3::Resource.new(
+      region: ENV['AWS_REGION'],
+      credentials: Aws::Credentials.new(
+        ENV['AWS_ACCESS_KEY_ID'],
+        ENV['AWS_SECRET_ACCESS_KEY']
+      )
+    )
+
+    obj = s3.bucket(ENV['S3_BUCKET_NAME']).object(old_filename)
+    obj.delete if obj.exists?
+  end
+end
+```
+
+### Dentist Controller Example
+
+In `DentistsController`, the `upload_image` action might look like this:
+
+```ruby
+def upload_image
+  return not_admin unless current_user.admin?
+
+  dentist = Dentist.find(params[:id])
+  file    = params[:image]
+  unless file
+    return render json: { error: "No image file uploaded" }, status: :unprocessable_entity
+  end
+
+  # Delete old file if present
+  if dentist.image_url.present?
+    old_filename = dentist.image_url.split('/').last
+    S3Uploader.delete(old_filename)
+  end
+
+  # Create new filename
+  original_filename = file.original_filename
+  ext               = File.extname(original_filename)
+  new_filename      = "dentist_#{dentist.id}_#{Time.now.to_i}#{ext}"
+
+  # Upload to S3
+  s3_url = S3Uploader.upload(file, new_filename)
+
+  # Update dentist record with new URL
+  dentist.update!(image_url: s3_url)
+
+  render json: dentist_to_camel(dentist), status: :ok
+end
+```
+
+This approach ensures each new upload overwrites the dentist’s `image_url` field, and the older S3 file gets deleted. The React frontend can then load that `image_url` directly, provided you set the **bucket policy** for public read.
+
+---
+
 ## Environment Variables
 
-- **`RAILS_MASTER_KEY`**: Rails 7 uses `config/credentials.yml.enc`. Make sure you have a valid master key for decryption when running in production or any environment that requires your app’s secrets.  
-- **`DENTIST_APPOINTMENT_BACKEND_DATABASE_PASSWORD`** (optional if you store the DB password in an environment variable).  
-- **`SECRET_KEY_BASE`**: Heroku or other hosting platforms often set this automatically. If self-hosting, set this manually in production.
+- **`RAILS_MASTER_KEY`**: Rails 7 uses `config/credentials.yml.enc`. Make sure you have a valid master key for decryption in production or any environment that requires your app’s secrets.  
+- **`DENTIST_APPOINTMENT_BACKEND_DATABASE_PASSWORD`**: If needed for your DB password.  
+- **`SECRET_KEY_BASE`**: Heroku or other hosting platforms set this automatically. If self-hosting, set it manually.  
+- **`AWS_ACCESS_KEY_ID`** / **`AWS_SECRET_ACCESS_KEY`** / **`AWS_REGION`** / **`S3_BUCKET_NAME`**: For uploading dentist images to Amazon S3.
 
 ---
 
@@ -302,7 +427,7 @@ We’ve also added routes to allow **admin** users to manage other user accounts
 
 Typical steps to deploy to a service like **Render**, **Heroku**, or a container-based platform:
 
-1. **Set environment variables** (like `RAILS_MASTER_KEY`) in your hosting environment or CI/CD build system.  
+1. **Set environment variables** (like `RAILS_MASTER_KEY`, `AWS_ACCESS_KEY_ID`, etc.) in your hosting environment or CI/CD build system.  
 2. **Migrate** the database in the remote environment:
 
    ```bash
