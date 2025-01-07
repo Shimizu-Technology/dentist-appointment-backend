@@ -1,4 +1,5 @@
-# config/routes.rb
+# File: config/routes.rb
+
 Rails.application.routes.draw do
   namespace :api do
     namespace :v1 do
@@ -7,7 +8,12 @@ Rails.application.routes.draw do
 
       # Appointments
       resources :appointments, only: [:index, :create, :show, :update, :destroy] do
-        collection { get :day_appointments }
+        collection do
+          get :day_appointments
+        end
+        member do
+          patch :check_in  # Toggle/check-in an appointment
+        end
       end
 
       # Dependents
@@ -30,11 +36,11 @@ Rails.application.routes.draw do
       # Users (admin can see index, etc.)
       resources :users, only: [:create, :index] do
         collection do
-          patch :current   # update current user
-          get :search      # search users
+          patch :current   # Update current user
+          get :search      # Search users
         end
         member do
-          patch :promote   # promote user to admin
+          patch :promote   # Promote user to admin
         end
       end
 

@@ -6,7 +6,6 @@ module Api
 
       # GET /api/v1/appointments
       def index
-        # If current_user is admin, see ALL appointments. Otherwise, only user’s own.
         if current_user.admin?
           base_scope = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
         else
@@ -14,7 +13,6 @@ module Api
                                    .where(user_id: current_user.id)
         end
 
-        # --- Filters ---
         # 1) Search filter
         if params[:q].present?
           search = params[:q].to_s.strip.downcase
@@ -62,7 +60,6 @@ module Api
         # *** ORDER BY APPOINTMENT_TIME ASC (earliest first) ***
         @appointments = base_scope.order(appointment_time: :asc).page(page).per(per_page)
 
-        # Return JSON shape with { appointments: [...], meta: {...} }
         render json: {
           appointments: @appointments.map { |appt| appointment_to_camel(appt) },
           meta: {
@@ -76,7 +73,6 @@ module Api
 
       # POST /api/v1/appointments
       def create
-        # If admin and user_id is passed, create for that user. Otherwise, for current_user.
         chosen_user_id = if current_user.admin? && appointment_params[:user_id].present?
                            appointment_params[:user_id]
                          else
@@ -88,9 +84,10 @@ module Api
           dentist_id:          appointment_params[:dentist_id],
           appointment_type_id: appointment_params[:appointment_type_id],
           appointment_time:    appointment_params[:appointment_time],
-          dependent_id:        appointment_params[:dependent_id], # could be nil if "self"
+          dependent_id:        appointment_params[:dependent_id],
           status:              appointment_params[:status],
-          notes:               appointment_params[:notes]
+          notes:               appointment_params[:notes],
+          checked_in:          appointment_params[:checked_in]
         )
 
         if appointment.save
@@ -139,13 +136,22 @@ module Api
         render json: { message: "Appointment canceled." }, status: :ok
       end
 
-      # GET /api/v1/appointments/day_appointments?dentist_id=X&date=YYYY-MM-DD&ignore_id=Y
+      # PATCH /api/v1/appointments/:id/check_in
+      def check_in
+        return not_admin unless current_user.admin?
+
+        appointment = Appointment.find(params[:id])
+        new_val = !appointment.checked_in
+        appointment.update!(checked_in: new_val)
+        render json: appointment_to_camel(appointment), status: :ok
+      end
+
+      # GET /api/v1/appointments/day_appointments
       def day_appointments
         dentist_id = params[:dentist_id]
         date_str   = params[:date]
         ignore_id  = params[:ignore_id].presence
 
-        # Check if day is globally closed
         if ClosedDay.exists?(date: date_str)
           return render json: {
             appointments: [],
@@ -171,7 +177,6 @@ module Api
                            .where(appointment_time: start_of_day..end_of_day)
                            .order(:appointment_time)
 
-        # Exclude the appointment we’re editing, if provided
         appts = appts.where.not(id: ignore_id) if ignore_id
 
         results = appts.map do |appt|
@@ -196,7 +201,8 @@ module Api
           :status,
           :dependent_id,
           :notes,
-          :user_id
+          :user_id,
+          :checked_in
         )
       end
 
@@ -214,6 +220,7 @@ module Api
           createdAt:         appt.created_at.iso8601,
           updatedAt:         appt.updated_at.iso8601,
           notes:             appt.notes,
+          checkedIn:         appt.checked_in,
 
           user: appt.user && {
             id:        appt.user.id,
@@ -244,6 +251,10 @@ module Api
             duration:    appt.appointment_type.duration
           }
         }
+      end
+
+      def not_admin
+        render json: { error: 'Not authorized (admin only)' }, status: :forbidden
       end
     end
   end
