@@ -67,6 +67,37 @@ module Api
         render json: { message: "Dentist removed" }, status: :ok
       end
 
+      # ----------------------------------------------------------
+      # POST /api/v1/dentists/:id/upload_image (admin-only)
+      # ----------------------------------------------------------
+      def upload_image
+        return not_admin unless current_user.admin?
+
+        dentist = Dentist.find(params[:id])
+        file = params[:image]
+        unless file
+          return render json: { error: "No image file uploaded" }, status: :unprocessable_entity
+        end
+
+        # Decide on a filename & path in public/uploads/dentists/
+        original_filename = file.original_filename
+        ext = File.extname(original_filename)
+        new_filename = "dentist_#{dentist.id}_#{Time.now.to_i}#{ext}"
+
+        upload_dir = Rails.root.join("public", "uploads", "dentists")
+        FileUtils.mkdir_p(upload_dir) unless File.directory?(upload_dir)
+
+        file_path = File.join(upload_dir, new_filename)
+
+        # Write the file
+        File.open(file_path, "wb") { |f| f.write(file.read) }
+
+        # Update dentist’s image_url with the relative path
+        dentist.update!(image_url: "/uploads/dentists/#{new_filename}")
+
+        render json: dentist_to_camel(dentist), status: :ok
+      end
+
       private
 
       def dentist_params
@@ -105,7 +136,7 @@ module Api
           endTime:   u.end_time,
           reason:    u.reason
         }
-      end      
+      end
     end
   end
 end

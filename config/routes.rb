@@ -1,5 +1,4 @@
-# File: config/routes.rb
-
+# config/routes.rb
 Rails.application.routes.draw do
   namespace :api do
     namespace :v1 do
@@ -8,9 +7,7 @@ Rails.application.routes.draw do
 
       # Appointments
       resources :appointments, only: [:index, :create, :show, :update, :destroy] do
-        collection do
-          get :day_appointments
-        end
+        collection { get :day_appointments }
       end
 
       # Dependents
@@ -20,8 +17,11 @@ Rails.application.routes.draw do
       resources :appointment_types
 
       # Dentists
-      resources :dentists, only: [:index, :show] do
-        get :availabilities, on: :member
+      resources :dentists, only: [:index, :show, :create, :update, :destroy] do
+        member do
+          get :availabilities     # GET /api/v1/dentists/:id/availabilities
+          post :upload_image      # POST /api/v1/dentists/:id/upload_image
+        end
       end
 
       # Specialties
@@ -44,7 +44,7 @@ Rails.application.routes.draw do
       # Schedules => single resource (singular)
       resource :schedule, only: [:show, :update], controller: :schedules
 
-      # DentistUnavailabilities
+      # Dentist Unavailabilities
       resources :dentist_unavailabilities, only: [:create, :update, :destroy]
     end
   end
