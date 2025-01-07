@@ -6,32 +6,78 @@ module Api
 
       # GET /api/v1/appointments
       def index
+        # If current_user is admin, we can see ALL appointments.
+        # Otherwise, only the current user’s appointments.
         if current_user.admin?
-          # Include :dependent (along with :user, :dentist, :appointment_type)
           base_scope = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
         else
-          # Regular user sees only their appointments
           base_scope = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
                                    .where(user_id: current_user.id)
         end
 
-        # Optional: Filter by dentist_id
-        if params[:dentist_id].present?
-          base_scope = base_scope.where(dentist_id: params[:dentist_id])
+        # --- Apply optional filters ---
+        #
+        # 1) Search filter: match userName, userEmail, or userId
+        if params[:q].present?
+          search = params[:q].to_s.strip.downcase
+          # Example: match user’s first_name OR last_name OR email, or user_id.
+          # We can do a join or rely on user fields. 
+          # NOTE: for advanced search, you might need to join users table if not preloaded.
+          base_scope = base_scope.joins(:user).where(
+            "LOWER(users.first_name) LIKE :s OR LOWER(users.last_name) LIKE :s 
+             OR LOWER(users.email) LIKE :s OR CAST(users.id AS TEXT) = :exact_s",
+            s: "%#{search}%", exact_s: search
+          )
         end
 
+        # 2) Filter by dentist name
+        if params[:dentist_name].present?
+          name_search = params[:dentist_name].to_s.strip.downcase
+          # Again, join or use a preloaded association
+          base_scope = base_scope.joins(:dentist).where(
+            "LOWER(dentists.first_name || ' ' || dentists.last_name) LIKE ?",
+            "%#{name_search}%"
+          )
+        end
+
+        # 3) Filter by date (YYYY-MM-DD)
+        if params[:date].present?
+          begin
+            date_obj = Date.parse(params[:date])
+            # Convert to beginning/end of day if needed
+            base_scope = base_scope.where(
+              appointment_time: date_obj.beginning_of_day..date_obj.end_of_day
+            )
+          rescue ArgumentError
+            # If date parsing fails, we could ignore or return error
+          end
+        end
+
+        # 4) Status filter
+        if params[:status].present?
+          if params[:status] == 'past'
+            # Show appointments whose time is < now
+            base_scope = base_scope.where("appointment_time < ?", Time.now)
+          else
+            # Show only specified status
+            base_scope = base_scope.where(status: params[:status])
+          end
+        end
+
+        # 5) Pagination
         page     = (params[:page].presence || 1).to_i
         per_page = (params[:per_page].presence || 10).to_i
 
         @appointments = base_scope.order(id: :desc).page(page).per(per_page)
 
+        # Return a JSON shape with { appointments: [...], meta: {...} }
         render json: {
           appointments: @appointments.map { |appt| appointment_to_camel(appt) },
           meta: {
-            currentPage:   @appointments.current_page,
-            totalPages:    @appointments.total_pages,
-            totalCount:    @appointments.total_count,
-            perPage:       per_page
+            currentPage: @appointments.current_page,
+            totalPages:  @appointments.total_pages,
+            totalCount:  @appointments.total_count,
+            perPage:     per_page
           }
         }, status: :ok
       end
