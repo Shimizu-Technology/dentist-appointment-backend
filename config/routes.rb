@@ -6,6 +6,9 @@ Rails.application.routes.draw do
       # Sessions / Auth
       post '/login', to: 'sessions#create'
 
+      # Finish invitation
+      patch '/invitations/finish', to: 'invitations#finish'
+
       # Appointments
       resources :appointments, only: [:index, :create, :show, :update, :destroy] do
         collection do
@@ -33,7 +36,7 @@ Rails.application.routes.draw do
       # Specialties
       resources :specialties
 
-      # Users (admin can see index, etc.)
+      # Users
       resources :users, only: [:create, :index] do
         collection do
           patch :current   # Update current user

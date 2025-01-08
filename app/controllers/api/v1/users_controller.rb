@@ -7,7 +7,7 @@ module Api
 
       # GET /api/v1/users (Admin-only, paginated)
       def index
-        return not_admin unless current_user.admin?
+        return not_admin unless current_user&.admin?
 
         page     = (params[:page].presence || 1).to_i
         per_page = (params[:per_page].presence || 10).to_i
@@ -28,32 +28,33 @@ module Api
 
       # POST /api/v1/users
       def create
-        # Non-admin can't set role=admin
-        # They can still set role=phone_only
+        # Only an admin may set 'role' = 'admin'; a non-admin cannot do that
+        # But if user is not logged in or not admin, let's allow them to create phone_only or normal
+        # Adjust as needed for your security model
+
+        # Build the user from params
         user = User.new(user_params_for_create)
 
-        # If phone_only user => skip password if blank (auto-generate a dummy password),
-        # otherwise ensure we have *some* password, but do NOT show it to the admin.
-        if user.phone_only? && user.password_digest.blank?
-          user.password = SecureRandom.hex(8)  # just to pass validation
-        else
-          # If a normal user omitted password, generate one and require a reset.
-          if user.password_digest.blank?
-            temp_pass = SecureRandom.hex(8)
-            user.password = temp_pass
-            user.force_password_reset = true  # so they must change it on first login
-          end
+        # If phone_only => no email needed, no password needed
+        # If normal user => no password is given here; they get an invitation link
+        # So let's generate an invitation token if the user has an email
+        if !user.phone_only? && user.email.present?
+          user.generate_invitation_token!  # or do it after user.save if you prefer
         end
 
-        # If a normal user tries to create role=admin => override it to 'user'
+        # Overrule an attempt to set role=admin if not currently admin
         if !current_user&.admin? && user.role == 'admin'
           user.role = 'user'
         end
 
         if user.save
-          # Send an email to the user (if user has an email and is not phone_only)
-          AdminUserMailer.welcome_user(user).deliver_later unless user.phone_only?
+          # Send the invitation email if user has an email and is not phone_only
+          if user.email.present? && !user.phone_only?
+            # Our new “invitation_email” method
+            AdminUserMailer.invitation_email(user).deliver_later
+          end
 
+          # Return a JWT or simply return the user. Because admin might be creating them in an admin panel
           token = JWT.encode({ user_id: user.id }, Rails.application.credentials.secret_key_base)
           render json: { jwt: token, user: user_to_camel(user) }, status: :created
         else
@@ -76,7 +77,7 @@ module Api
 
       # PATCH /api/v1/users/:id/promote
       def promote
-        return not_admin unless current_user.admin?
+        return not_admin unless current_user&.admin?
 
         user = User.find(params[:id])
         if user.update(role: 'admin')
@@ -88,7 +89,7 @@ module Api
 
       # GET /api/v1/users/search?q=...
       def search
-        return not_admin unless current_user.admin?
+        return not_admin unless current_user&.admin?
 
         query    = params[:q].to_s.strip.downcase
         page     = (params[:page].presence || 1).to_i
@@ -127,11 +128,13 @@ module Api
       private
 
       def user_params_for_create
-        # allow phone, first_name, last_name, role, password, email, etc.
+        # allow phone, first_name, last_name, role, email, but no password param needed
         params.require(:user).permit(
-          :email, :password, :phone,
-          :provider_name, :policy_number, :plan_type,
-          :first_name, :last_name, :role
+          :email,
+          :phone,
+          :first_name,
+          :last_name,
+          :role
         )
       end
 
@@ -147,12 +150,13 @@ module Api
           firstName: u.first_name,
           lastName: u.last_name,
           phone: u.phone,
-          insuranceInfo: u.provider_name ? {
+          insuranceInfo: (u.provider_name ? {
             providerName: u.provider_name,
             policyNumber: u.policy_number,
-            planType: u.plan_type
-          } : nil,
-          forcePasswordReset: u.force_password_reset
+            planType:     u.plan_type
+          } : nil),
+          forcePasswordReset: u.force_password_reset,
+          invitationToken: u.invitation_token  # optional if you want to see it in the response
         }
       end
 
