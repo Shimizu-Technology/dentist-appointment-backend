@@ -22,7 +22,7 @@ module DentistAppointmentBackend
     #    Then we store it in config.x.frontend_url so that mailers (and others)
     #    can reference it via Rails.application.config.x.frontend_url.
     # ----------------------------------------------------------------------------
-    config.x.frontend_url = ENV.fetch("FRONTEND_URL")
+    config.x.frontend_url = ENV.fetch("FRONTEND_URL", "http://localhost:5173")
 
     # ...
   end
