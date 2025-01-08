@@ -3,37 +3,37 @@
 module Api
   module V1
     class AppointmentsController < BaseController
+      before_action :authenticate_user!
 
       # GET /api/v1/appointments
       def index
-        # (1) Decide the base_scope depending on admin vs. regular user,
-        #     plus the optional user_id=me for admins
         if current_user.admin?
           if params[:user_id] == 'me'
-            # Admin specifically requested only their own appointments
+            # If an admin wants specifically their own
             base_scope = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
                                      .where(user_id: current_user.id)
           else
-            # Admin sees ALL by default
+            # Admin sees all
             base_scope = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
           end
         else
-          # Regular user => only their own appointments
+          # Non-admin => only your own
           base_scope = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
                                    .where(user_id: current_user.id)
         end
 
-        # 1) Optional search filter by user name/email/id
+        # Optional filters: q=..., date=..., dentist_name=..., status=..., etc.
         if params[:q].present?
-          search = params[:q].to_s.strip.downcase
+          search = params[:q].strip.downcase
           base_scope = base_scope.joins(:user).where(
-            "LOWER(users.first_name) LIKE :s OR LOWER(users.last_name) LIKE :s
-             OR LOWER(users.email) LIKE :s OR CAST(users.id AS TEXT) = :exact_s",
+            "LOWER(users.first_name) LIKE :s 
+             OR LOWER(users.last_name) LIKE :s 
+             OR LOWER(users.email) LIKE :s
+             OR CAST(users.id AS TEXT) = :exact_s",
             s: "%#{search}%", exact_s: search
           )
         end
 
-        # 2) Filter by dentist name
         if params[:dentist_name].present?
           name_search = params[:dentist_name].strip.downcase
           base_scope = base_scope.joins(:dentist).where(
@@ -42,7 +42,6 @@ module Api
           )
         end
 
-        # 3) Filter by date
         if params[:date].present?
           begin
             date_obj = Date.parse(params[:date])
@@ -50,11 +49,10 @@ module Api
               appointment_time: date_obj.beginning_of_day..date_obj.end_of_day
             )
           rescue ArgumentError
-            # ignore or handle invalid date
+            # handle invalid date
           end
         end
 
-        # 4) Status filter
         if params[:status].present?
           if params[:status] == 'past'
             base_scope = base_scope.where("appointment_time < ?", Time.now)
@@ -63,12 +61,11 @@ module Api
           end
         end
 
-        # 5) Pagination
         page     = (params[:page].presence || 1).to_i
         per_page = (params[:per_page].presence || 10).to_i
 
-        # *** ORDER BY APPOINTMENT_TIME ASC (earliest first) ***
-        @appointments = base_scope.order(appointment_time: :asc).page(page).per(per_page)
+        @appointments = base_scope.order(appointment_time: :asc)
+                                  .page(page).per(per_page)
 
         render json: {
           appointments: @appointments.map { |appt| appointment_to_camel(appt) },
@@ -83,6 +80,7 @@ module Api
 
       # POST /api/v1/appointments
       def create
+        # If admin can pass user_id param, use that. Otherwise use current_user
         chosen_user_id = if current_user.admin? && appointment_params[:user_id].present?
                            appointment_params[:user_id]
                          else
@@ -110,8 +108,12 @@ module Api
       # GET /api/v1/appointments/:id
       def show
         appointment = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
-                                 .find(params[:id])
+                                 .find_by(id: params[:id])
 
+        # If not found at all => return 404
+        return render_not_found unless appointment
+
+        # Admin => can see anything; else must be your own
         unless current_user.admin? || appointment.user_id == current_user.id
           return render json: { error: "Not authorized" }, status: :forbidden
         end
@@ -121,7 +123,8 @@ module Api
 
       # PATCH/PUT /api/v1/appointments/:id
       def update
-        appointment = Appointment.find(params[:id])
+        appointment = Appointment.find_by(id: params[:id])
+        return render_not_found unless appointment
 
         unless current_user.admin? || appointment.user_id == current_user.id
           return render json: { error: "Not authorized" }, status: :forbidden
@@ -136,7 +139,8 @@ module Api
 
       # DELETE /api/v1/appointments/:id
       def destroy
-        appointment = Appointment.find(params[:id])
+        appointment = Appointment.find_by(id: params[:id])
+        return render_not_found unless appointment
 
         unless current_user.admin? || appointment.user_id == current_user.id
           return render json: { error: "Not authorized" }, status: :forbidden
@@ -150,7 +154,9 @@ module Api
       def check_in
         return not_admin unless current_user.admin?
 
-        appointment = Appointment.find(params[:id])
+        appointment = Appointment.find_by(id: params[:id])
+        return render_not_found unless appointment
+
         new_val = !appointment.checked_in
         appointment.update!(checked_in: new_val)
         render json: appointment_to_camel(appointment), status: :ok
@@ -160,8 +166,9 @@ module Api
       def day_appointments
         dentist_id = params[:dentist_id]
         date_str   = params[:date]
-        ignore_id  = params[:ignore_id].presence
+        ignore_id  = params[:ignore_id]
 
+        # Check if globally closed
         if ClosedDay.exists?(date: date_str)
           return render json: {
             appointments: [],
@@ -203,6 +210,14 @@ module Api
 
       private
 
+      def render_not_found
+        render json: { error: 'Appointment not found' }, status: :not_found
+      end
+
+      def not_admin
+        render json: { error: 'Not authorized (admin only)' }, status: :forbidden
+      end
+
       def appointment_params
         params.require(:appointment).permit(
           :appointment_time,
@@ -220,17 +235,14 @@ module Api
         {
           id:                appt.id,
           userId:            appt.user_id,
-          userName:          appt.user ? "#{appt.user.first_name} #{appt.user.last_name}" : nil,
-          userEmail:         appt.user&.email,
-          dependentId:       appt.dependent_id,
           dentistId:         appt.dentist_id,
           appointmentTypeId: appt.appointment_type_id,
           appointmentTime:   appt.appointment_time&.iso8601,
           status:            appt.status,
-          createdAt:         appt.created_at.iso8601,
-          updatedAt:         appt.updated_at.iso8601,
           notes:             appt.notes,
           checkedIn:         appt.checked_in,
+          createdAt:         appt.created_at.iso8601,
+          updatedAt:         appt.updated_at.iso8601,
 
           user: appt.user && {
             id:        appt.user.id,
@@ -241,6 +253,7 @@ module Api
             role:      appt.user.role
           },
 
+          dependentId:  appt.dependent_id,
           dependent: appt.dependent && {
             id:          appt.dependent.id,
             firstName:   appt.dependent.first_name,
@@ -254,6 +267,7 @@ module Api
             lastName:  appt.dentist.last_name,
             specialty: appt.dentist.specialty
           },
+
           appointmentType: appt.appointment_type && {
             id:          appt.appointment_type.id,
             name:        appt.appointment_type.name,
@@ -261,10 +275,6 @@ module Api
             duration:    appt.appointment_type.duration
           }
         }
-      end
-
-      def not_admin
-        render json: { error: 'Not authorized (admin only)' }, status: :forbidden
       end
     end
   end
