@@ -7,8 +7,9 @@ This project is a **Ruby on Rails** API for scheduling dentist appointments for 
 3. **Dependents** (children) management for parent users.  
 4. **Multiple dentists** supporting specialized care (e.g., pediatric vs. adult).  
 5. **Appointment types** (e.g., “Cleaning,” “Filling,” “Checkup,” etc.) that admins can create and manage.  
-6. **Admin user-management** (list all users, promote user to admin role).  
-7. **Flow for Appointment Status** (e.g., “scheduled” -> “completed” -> “cancelled”)
+6. **Admin user-management** (list all users, promote user to admin role, invite users by email).  
+7. **Flow for Appointment Status** (e.g., “scheduled” -> “completed” -> “cancelled”).  
+8. **Email invitations** for new users, using **SendGrid**.  
 
 This README provides setup instructions, usage examples, and endpoint documentation.
 
@@ -30,9 +31,10 @@ This README provides setup instructions, usage examples, and endpoint documentat
    - [Admin Endpoints](#admin-endpoints)  
    - [Users (Admin Only)](#users-admin-only)  
 7. [S3 Image Upload (Dentist Photos)](#s3-image-upload-dentist-photos)
-8. [Environment Variables](#environment-variables)  
-9. [Deployment](#deployment)  
-10. [Future Enhancements / Next Steps](#future-enhancements--next-steps)
+8. [Email Invitations (SendGrid)](#email-invitations-sendgrid)
+9. [Environment Variables](#environment-variables)  
+10. [Deployment](#deployment)  
+11. [Future Enhancements / Next Steps](#future-enhancements--next-steps)
 
 ---
 
@@ -96,9 +98,9 @@ You can then access the API at:
 
 This API uses **JWT-based authentication**. To authenticate:
 
-1. **Request a token** via the `POST /api/v1/login` endpoint by sending valid user credentials (`email` and `password`).  
+1. **Request a token** via `POST /api/v1/login` by sending valid user credentials (`email`, `password`).  
 2. **Receive a JWT** in the response.  
-3. **Include** the token in subsequent requests in the **Authorization** header:
+3. **Include** that token in subsequent requests in the **Authorization** header:
 
 ```
 Authorization: Bearer <your_jwt_token_here>
@@ -199,7 +201,7 @@ All endpoints below **require** a valid JWT token in the `Authorization` header.
   This would mark the appointment as completed.
 
 - **`DELETE /api/v1/appointments/:id`**  
-  **Description**: Cancels/deletes an appointment by ID.  
+  **Description**: Cancels or deletes an appointment by ID.  
   - Admin can delete any appointment.  
   - Regular user can only delete if it belongs to them or a dependent.
 
@@ -275,9 +277,7 @@ We’ve also added routes to allow **admin** users to manage other user accounts
   Returns a list of all users (admin-only).  
 
 - **`POST /api/v1/users`**  
-  Create a new user.  
-  - If `role: "admin"` is passed in and the current user is admin, the new user can be created as admin.  
-  - Otherwise, defaults to `role: "user"`.
+  Create a new user. This also supports an **invitation** email flow (see **[Email Invitations](#email-invitations-sendgrid)** below).  
 
 - **`PATCH /api/v1/users/current`**  
   Update the **currently logged-in** user’s fields (e.g., first name, last name, phone, etc.).  
@@ -295,7 +295,7 @@ We’ve also added routes to allow **admin** users to manage other user accounts
 
 We use a **custom S3 uploader** for dentist photos—**not** Active Storage. The flow is:
 
-1. **Dentist Photo** is uploaded via a `POST /api/v1/dentists/:id/upload_image` endpoint (admin-only).  
+1. **Dentist Photo** is uploaded via `POST /api/v1/dentists/:id/upload_image` (admin-only).  
 2. We use an `S3Uploader` (in `app/services/s3_uploader.rb`) to:  
    - Delete the old image if one exists  
    - Upload the new file to S3  
@@ -314,7 +314,7 @@ S3_BUCKET_NAME=dentist-images
 
 ### Bucket Policy for Public Access
 
-Because our S3 bucket has **Object Ownership = Bucket owner enforced**, ACL-based public reads (like `acl: 'public-read'`) are **ignored**. To actually allow the images to be loaded publicly, add a **bucket policy** (in the AWS Console under *Permissions -> Bucket Policy*) that grants `s3:GetObject` to everyone on all objects in the bucket:
+Because our S3 bucket has **Object Ownership = Bucket owner enforced**, ACL-based public reads (like `acl: 'public-read'`) are **ignored**. To actually allow the images to be loaded publicly, add a **bucket policy** that grants `s3:GetObject` to everyone on all objects in the bucket:
 
 ```jsonc
 {
@@ -336,81 +336,50 @@ Because our S3 bucket has **Object Ownership = Bucket owner enforced**, ACL-base
 - Ensure “Block Public Access” is **off** at least for “Bucket policies.”  
 - With this policy, any uploaded images become publicly viewable at their S3 URL.
 
-### S3Uploader
+---
 
-Our `app/services/s3_uploader.rb` might look like this:
+## Email Invitations (SendGrid)
+
+We have added an **invitation** flow that leverages **SendGrid** to send emails when an admin creates a new user with an email address. The steps are:
+
+1. **Admin** calls `POST /api/v1/users` with `email`, `first_name`, `last_name` (and optionally `role`).  
+2. The server **generates** an `invitation_token` and sends a **SendGrid** email to the user.  
+3. The user **clicks** the invitation link, which leads to the front-end’s `finish-invitation` page (e.g., `GET /finish-invitation?token=...`).  
+4. The user picks a **new password**, and we call `PATCH /api/v1/invitations/finish` with the token & password.  
+5. The server **finalizes** the user (removing the invitation token, setting their password, optionally logging them in).  
+
+### Environment Variables (SendGrid)
+
+- **`SENDGRID_API_KEY`**: The key from your SendGrid account.  
+- **`SENDGRID_FROM_EMAIL`**: The verified sender address (e.g., `'no-reply@clinicdomain.com'`).  
+
+In `config/environments/production.rb` (and possibly `development.rb`), we configure `ActionMailer` to use SendGrid:
 
 ```ruby
-# app/services/s3_uploader.rb
-require 'aws-sdk-s3'
+ActionMailer::Base.smtp_settings = {
+  user_name: 'apikey',
+  password: ENV['SENDGRID_API_KEY'],
+  domain: 'yourdomain.com',
+  address: 'smtp.sendgrid.net',
+  port: 587,
+  authentication: :plain,
+  enable_starttls_auto: true
+}
+```
 
-class S3Uploader
-  def self.upload(file, filename)
-    s3 = Aws::S3::Resource.new(
-      region: ENV['AWS_REGION'],
-      credentials: Aws::Credentials.new(
-        ENV['AWS_ACCESS_KEY_ID'],
-        ENV['AWS_SECRET_ACCESS_KEY']
-      )
-    )
+And in your `AdminUserMailer` (or similarly named mailer), ensure you use:
 
-    obj = s3.bucket(ENV['S3_BUCKET_NAME']).object(filename)
-    # ACL is effectively ignored if “bucket owner enforced,” but we keep it:
-    obj.upload_file(file.path, acl: 'public-read')
-    obj.public_url
-  end
+```ruby
+class AdminUserMailer < ApplicationMailer
+  default from: ENV['SENDGRID_FROM_EMAIL'] || 'YourDentalApp <no-reply@clinicdomain.com>'
 
-  def self.delete(old_filename)
-    s3 = Aws::S3::Resource.new(
-      region: ENV['AWS_REGION'],
-      credentials: Aws::Credentials.new(
-        ENV['AWS_ACCESS_KEY_ID'],
-        ENV['AWS_SECRET_ACCESS_KEY']
-      )
-    )
-
-    obj = s3.bucket(ENV['S3_BUCKET_NAME']).object(old_filename)
-    obj.delete if obj.exists?
+  def invitation_email(user)
+    @user = user
+    @invitation_url = "http://your-frontend-url/finish-invitation?token=#{user.invitation_token}"
+    mail to: @user.email, subject: "Welcome to Our Dental Clinic! Please finish creating your account"
   end
 end
 ```
-
-### Dentist Controller Example
-
-In `DentistsController`, the `upload_image` action might look like this:
-
-```ruby
-def upload_image
-  return not_admin unless current_user.admin?
-
-  dentist = Dentist.find(params[:id])
-  file    = params[:image]
-  unless file
-    return render json: { error: "No image file uploaded" }, status: :unprocessable_entity
-  end
-
-  # Delete old file if present
-  if dentist.image_url.present?
-    old_filename = dentist.image_url.split('/').last
-    S3Uploader.delete(old_filename)
-  end
-
-  # Create new filename
-  original_filename = file.original_filename
-  ext               = File.extname(original_filename)
-  new_filename      = "dentist_#{dentist.id}_#{Time.now.to_i}#{ext}"
-
-  # Upload to S3
-  s3_url = S3Uploader.upload(file, new_filename)
-
-  # Update dentist record with new URL
-  dentist.update!(image_url: s3_url)
-
-  render json: dentist_to_camel(dentist), status: :ok
-end
-```
-
-This approach ensures each new upload overwrites the dentist’s `image_url` field, and the older S3 file gets deleted. The React frontend can then load that `image_url` directly, provided you set the **bucket policy** for public read.
 
 ---
 
@@ -419,7 +388,9 @@ This approach ensures each new upload overwrites the dentist’s `image_url` fie
 - **`RAILS_MASTER_KEY`**: Rails 7 uses `config/credentials.yml.enc`. Make sure you have a valid master key for decryption in production or any environment that requires your app’s secrets.  
 - **`DENTIST_APPOINTMENT_BACKEND_DATABASE_PASSWORD`**: If needed for your DB password.  
 - **`SECRET_KEY_BASE`**: Heroku or other hosting platforms set this automatically. If self-hosting, set it manually.  
-- **`AWS_ACCESS_KEY_ID`** / **`AWS_SECRET_ACCESS_KEY`** / **`AWS_REGION`** / **`S3_BUCKET_NAME`**: For uploading dentist images to Amazon S3.
+- **`AWS_ACCESS_KEY_ID`** / **`AWS_SECRET_ACCESS_KEY`** / **`AWS_REGION`** / **`S3_BUCKET_NAME`**: For uploading dentist images to Amazon S3.  
+- **`SENDGRID_API_KEY`**: Used for sending emails via SendGrid.  
+- **`SENDGRID_FROM_EMAIL`**: The “from” address for email invitations or notifications.
 
 ---
 
@@ -427,7 +398,7 @@ This approach ensures each new upload overwrites the dentist’s `image_url` fie
 
 Typical steps to deploy to a service like **Render**, **Heroku**, or a container-based platform:
 
-1. **Set environment variables** (like `RAILS_MASTER_KEY`, `AWS_ACCESS_KEY_ID`, etc.) in your hosting environment or CI/CD build system.  
+1. **Set environment variables** (like `RAILS_MASTER_KEY`, `AWS_ACCESS_KEY_ID`, `SENDGRID_API_KEY`, etc.) in your hosting environment or CI/CD build system.  
 2. **Migrate** the database in the remote environment:
 
    ```bash
@@ -446,7 +417,7 @@ Typical steps to deploy to a service like **Render**, **Heroku**, or a container
    bin/rails server
    ```
 
-For Docker-based deployments, see the provided `Dockerfile` and `.dockerignore`.
+For Docker-based deployments, see any provided `Dockerfile` and `.dockerignore`.
 
 ---
 
@@ -455,7 +426,7 @@ For Docker-based deployments, see the provided `Dockerfile` and `.dockerignore`.
 - **Insurance Info**: The `User` model can store `provider_name`, `policy_number`, and `plan_type`. Optionally move to a separate `Insurance` model.  
 - **Recurring appointments** or advanced scheduling logic.  
 - **Payment Integration** (Stripe, PayPal, etc.).  
-- **Email/SMS notifications** for reminders or confirmations.  
+- **SMS notifications** for reminders or confirmations.  
 - **Additional Admin Tools**: e.g., searching for “next available times” across all dentists or precomputing free slots for faster lookups.  
 - **Advanced admin reporting** (monthly appointment volume, no-show rates, etc.).  
 - **Extended user management**: Possibly allow demotion or user deactivation, plus more robust role or permission systems.
