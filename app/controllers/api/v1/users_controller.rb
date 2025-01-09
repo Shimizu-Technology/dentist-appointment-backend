@@ -28,18 +28,16 @@ module Api
 
       # POST /api/v1/users
       def create
-        # Only an admin may set 'role' = 'admin'; a non-admin cannot do that
-        # But if user is not logged in or not admin, let's allow them to create phone_only or normal
-        # Adjust as needed for your security model
-
         # Build the user from params
         user = User.new(user_params_for_create)
 
-        # If phone_only => no email needed, no password needed
-        # If normal user => no password is given here; they get an invitation link
-        # So let's generate an invitation token if the user has an email
+        # If no role is passed in, default it to 'user'
+        user.role ||= 'user'
+
+        # If phone_only => no email needed, no password needed.
+        # If normal user => no password is given here; we generate an invitation if they have an email
         if !user.phone_only? && user.email.present?
-          user.generate_invitation_token!  # or do it after user.save if you prefer
+          user.generate_invitation_token!
         end
 
         # Overrule an attempt to set role=admin if not currently admin
@@ -48,13 +46,13 @@ module Api
         end
 
         if user.save
-          # Send the invitation email if user has an email and is not phone_only
+          # If user has an email and is not phone_only, send invitation
           if user.email.present? && !user.phone_only?
             # Our new “invitation_email” method
             AdminUserMailer.invitation_email(user).deliver_later
           end
 
-          # Return a JWT or simply return the user. Because admin might be creating them in an admin panel
+          # Return a JWT or simply return the user.
           token = JWT.encode({ user_id: user.id }, Rails.application.credentials.secret_key_base)
           render json: { jwt: token, user: user_to_camel(user) }, status: :created
         else
@@ -128,7 +126,8 @@ module Api
       private
 
       def user_params_for_create
-        # allow phone, first_name, last_name, role, email, but no password param needed
+        # NOTE: We do NOT permit password here since we rely on invitation-based or phone_only approach
+        # But we do allow :role, in case an admin tries to pass role=admin, which we guard above
         params.require(:user).permit(
           :email,
           :phone,
@@ -138,8 +137,18 @@ module Api
         )
       end
 
+      # For updating the current user, we also allow insurance fields
+      # (provider_name, policy_number, plan_type).
       def user_update_params
-        params.require(:user).permit(:first_name, :last_name, :phone, :email)
+        params.require(:user).permit(
+          :first_name,
+          :last_name,
+          :phone,
+          :email,
+          :provider_name,
+          :policy_number,
+          :plan_type
+        )
       end
 
       def user_to_camel(u)
@@ -156,7 +165,7 @@ module Api
             planType:     u.plan_type
           } : nil),
           forcePasswordReset: u.force_password_reset,
-          invitationToken: u.invitation_token  # optional if you want to see it in the response
+          invitationToken: u.invitation_token
         }
       end
 
@@ -166,3 +175,5 @@ module Api
     end
   end
 end
+
+  
