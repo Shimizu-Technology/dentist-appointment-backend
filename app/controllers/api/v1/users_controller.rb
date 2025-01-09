@@ -3,7 +3,8 @@
 module Api
   module V1
     class UsersController < BaseController
-      # We no longer skip authentication here; we require admin for everything except maybe :current
+      # By default, we do NOT skip authentication, so an admin must be logged in
+      # to access these actions.
 
       # GET /api/v1/users (Admin-only, paginated)
       def index
@@ -26,11 +27,11 @@ module Api
         }, status: :ok
       end
 
-      # POST /api/v1/users (ADMIN creation)
+      # POST /api/v1/users
+      # => Admin creation (invitation-based)
       #
-      # Only an admin can create a new user here (invitation-based).
-      # If you'd like to do phone_only user creation or 'user' role, that’s allowed,
-      # but we generate an invitation token if email is present.
+      # Only an admin can create a new user here. (No password param is required,
+      # because we send an invitation email if they have an email address.)
       def create
         return not_admin unless current_user&.admin?
 
@@ -38,8 +39,7 @@ module Api
       end
 
       # PATCH /api/v1/users/current
-      #
-      # Allows the currently logged-in user to update their own data (e.g. insurance info).
+      # => Allows the *currently logged-in user* to update their own data
       def current
         unless @current_user
           return render json: { error: 'Unauthorized' }, status: :unauthorized
@@ -52,7 +52,9 @@ module Api
         end
       end
 
-      # PATCH /api/v1/users/:id/promote (Admin-only)
+      # PATCH /api/v1/users/:id/promote  (Admin-only)
+      #
+      # Example usage: promote a user to admin
       def promote
         return not_admin unless current_user&.admin?
 
@@ -65,6 +67,8 @@ module Api
       end
 
       # GET /api/v1/users/search?q=...
+      # => Admin-only search. Supports partial matching by first_name, last_name,
+      #    *full_name* (first + last), and email, all in LOWER(...) for case-insensitivity.
       def search
         return not_admin unless current_user&.admin?
 
@@ -84,10 +88,14 @@ module Api
           }, status: :ok
         end
 
-        base_scope = User.where(
-          "LOWER(first_name) LIKE ? OR LOWER(last_name) LIKE ? OR LOWER(email) LIKE ?",
-          "%#{query}%", "%#{query}%", "%#{query}%"
-        ).order(:id)
+        # Example for PostgreSQL: using (first_name || ' ' || last_name).
+        # If MySQL, use CONCAT(first_name, ' ', last_name).
+        base_scope = User.where("
+          LOWER(first_name) LIKE :s
+          OR LOWER(last_name) LIKE :s
+          OR LOWER(first_name || ' ' || last_name) LIKE :s
+          OR LOWER(email) LIKE :s
+        ", s: "%#{query}%").order(:id)
 
         @users = base_scope.page(page).per(per_page)
 
@@ -122,10 +130,7 @@ module Api
             AdminUserMailer.invitation_email(user).deliver_later
           end
 
-          token = JWT.encode(
-            { user_id: user.id },
-            Rails.application.credentials.secret_key_base
-          )
+          token = JWT.encode({ user_id: user.id }, Rails.application.credentials.secret_key_base)
           render json: { jwt: token, user: user_to_camel(user) }, status: :created
         else
           render json: { errors: user.errors.full_messages }, status: :unprocessable_entity
@@ -135,7 +140,7 @@ module Api
       # ----------------------------------------------------------------
       # PERMITTED PARAMS
       # ----------------------------------------------------------------
-      # For an admin creating a user, we don’t require a password param => invitation-based flow.
+      # For an admin creating a user: no password param => invitation-based flow
       def user_params_for_admin_create
         params.require(:user).permit(
           :email,
@@ -178,7 +183,7 @@ module Api
       end
 
       def not_admin
-        render json: { error: 'Not authorized (admin only)' }, status: :forbidden
+        render json: { error: "Not authorized (admin only)" }, status: :forbidden
       end
     end
   end
