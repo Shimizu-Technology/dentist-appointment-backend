@@ -7,7 +7,10 @@ class Appointment < ApplicationRecord
   belongs_to :dependent, optional: true
 
   before_create :set_default_status
-  before_create :default_checked_in  # <-- NEW callback to ensure checked_in = false if nil
+  before_create :default_checked_in  # ensures checked_in defaults to false
+
+  # Optionally, schedule reminders after creation:
+  after_create :schedule_default_reminders
 
   validate :clinic_not_closed_on_this_date
   validate :within_clinic_hours
@@ -20,16 +23,42 @@ class Appointment < ApplicationRecord
     self.status ||= 'scheduled'
   end
 
-  # Ensure checked_in is never nil (PG constraint requires NOT NULL).
   def default_checked_in
     self.checked_in = false if checked_in.nil?
   end
 
-  # -------------------------------------------
-  # Instead of “Sunday is closed,” we use the
-  # clinic_settings to see which days are open,
-  # and also check closed_days.
-  # -------------------------------------------
+  # -----------------------------
+  # Example of auto-creating reminders (optional)
+  # -----------------------------
+  def schedule_default_reminders
+    # Suppose you want a “day before” reminder at 9:00 AM
+    day_before = (appointment_time.to_date - 1.day).to_time.change(hour: 9, min: 0)
+    # And a “day of” reminder at 8:00 AM
+    same_day = appointment_time.change(hour: 8, min: 0)
+
+    # Create them only if they’re in the future (i.e., user didn’t book a same-day appt in the past)
+    if day_before > Time.current
+      AppointmentReminder.create!(
+        appointment: self,
+        send_at: day_before,
+        delivery_method: "sms",  # or "email" or "both"
+        label: "1 day before"
+      )
+    end
+
+    if same_day > Time.current
+      AppointmentReminder.create!(
+        appointment: self,
+        send_at: same_day,
+        delivery_method: "sms",  # or "both"
+        label: "Day of"
+      )
+    end
+  end
+
+  # -----------------------------
+  # Validation Helpers
+  # -----------------------------
   def clinic_not_closed_on_this_date
     setting = ClinicSetting.singleton
 
@@ -44,7 +73,7 @@ class Appointment < ApplicationRecord
       return
     end
 
-    # Check single-day closures from the closed_days table:
+    # Check single-day closures from the closed_days table
     if ClosedDay.exists?(date: appointment_time.to_date)
       errors.add(:base, "The clinic is closed on #{appointment_time.to_date}.")
     end
@@ -52,21 +81,21 @@ class Appointment < ApplicationRecord
 
   def within_clinic_hours
     setting = ClinicSetting.singleton
-    open_t  = setting.open_time   # "09:00"
-    close_t = setting.close_time  # "17:00"
+    open_t  = setting.open_time   # e.g. "09:00"
+    close_t = setting.close_time  # e.g. "17:00"
 
     open_hour, open_min   = open_t.split(':').map(&:to_i)
     close_hour, close_min = close_t.split(':').map(&:to_i)
 
-    # Convert appointment_time to local time, if stored in UTC:
+    # Convert to local time (assuming your rails time zone is set)
     appt_local = appointment_time.in_time_zone(Rails.configuration.time_zone)
 
-    # build local open_dt, close_dt
+    # Build local open_dt, close_dt
     date_str = appt_local.strftime('%Y-%m-%d')
     open_dt  = Time.zone.parse("#{date_str} #{open_hour}:#{open_min}")
     close_dt = Time.zone.parse("#{date_str} #{close_hour}:#{close_min}")
 
-    unless (appt_local >= open_dt && appt_local < close_dt)
+    unless appt_local >= open_dt && appt_local < close_dt
       errors.add(:base, "Appointment time must be between #{open_t} and #{close_t}.")
     end
   end
@@ -93,7 +122,8 @@ class Appointment < ApplicationRecord
       .where(dentist_id: dentist_id, status: 'scheduled')
       .where.not(id: id)
       .where("appointment_time < ?", appointment_end)
-      .where("appointment_time + (COALESCE((SELECT duration FROM appointment_types WHERE id = appointment_type_id), 30) * interval '1 minute') > ?", appointment_time)
+      .where("appointment_time + (COALESCE((SELECT duration FROM appointment_types
+        WHERE id = appointment_type_id), 30) * interval '1 minute') > ?", appointment_time)
 
     if overlapping.exists?
       errors.add(:base, "Dentist already has an appointment overlapping that time.")
