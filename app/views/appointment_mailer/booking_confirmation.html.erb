@@ -1,0 +1,32 @@
+<!-- File: app/views/appointment_mailer/booking_confirmation.html.erb -->
+<h1>Appointment Confirmation</h1>
+
+<p>Dear <%= @appointment.user&.first_name %>,</p>
+
+<p>
+  This is to confirm that your appointment has been successfully booked.
+  Here are the details:
+</p>
+
+<ul>
+  <li><strong>Date/Time:</strong> 
+    <%= @appointment.appointment_time&.in_time_zone&.strftime('%B %d, %Y at %I:%M %p') %>
+  </li>
+  <li><strong>Dentist:</strong> 
+    Dr. <%= @appointment.dentist&.first_name %> <%= @appointment.dentist&.last_name %>
+  </li>
+  <li><strong>Appointment Type:</strong> 
+    <%= @appointment.appointment_type&.name %> 
+    (<%= @appointment.appointment_type&.duration %> minutes)
+  </li>
+</ul>
+
+<% if @appointment.dependent_id? %>
+  <p>
+    Since this appointment is for your dependent 
+    (<%= @appointment.dependent&.first_name %> <%= @appointment.dependent&.last_name %>), 
+    you will receive all communications on their behalf.
+  </p>
+<% end %>
+
+<p>Thank you for choosing our dental clinic!</p>

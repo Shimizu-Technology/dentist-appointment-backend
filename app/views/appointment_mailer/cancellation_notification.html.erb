@@ -1,0 +1,23 @@
+<!-- File: app/views/appointment_mailer/cancellation_notification.html.erb -->
+<h1>Appointment Canceled</h1>
+
+<p>Dear <%= @appointment.user&.first_name %>,</p>
+
+<p>
+  This is to inform you that your appointment 
+  scheduled on <%= @appointment.appointment_time&.in_time_zone&.strftime('%B %d, %Y at %I:%M %p') %>
+  has been canceled.
+</p>
+
+<% if @appointment.dependent_id? %>
+  <p>
+    The appointment for your dependent 
+    (<%= @appointment.dependent&.first_name %> <%= @appointment.dependent&.last_name %>) 
+    is no longer active.
+  </p>
+<% end %>
+
+<p>
+  If this cancellation was unexpected, please contact us to reschedule
+  at your earliest convenience.
+</p>

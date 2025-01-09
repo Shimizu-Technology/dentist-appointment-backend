@@ -9,20 +9,16 @@ module Api
       def index
         if current_user.admin?
           if params[:user_id] == 'me'
-            # If an admin wants specifically their own
             base_scope = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
                                      .where(user_id: current_user.id)
           else
-            # Admin sees all
             base_scope = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
           end
         else
-          # Non-admin => only your own
           base_scope = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
                                    .where(user_id: current_user.id)
         end
 
-        # Optional filters: q=..., date=..., dentist_name=..., status=..., etc.
         if params[:q].present?
           search = params[:q].strip.downcase
           base_scope = base_scope.joins(:user).where(
@@ -38,7 +34,6 @@ module Api
           )
         end
 
-        # For dentist_name filter if desired:
         if params[:dentist_name].present?
           name_search = params[:dentist_name].strip.downcase
           base_scope = base_scope.joins(:dentist).where(
@@ -47,7 +42,6 @@ module Api
           )
         end
 
-        # If params[:date], parse it and filter by that day
         if params[:date].present?
           begin
             date_obj = Date.parse(params[:date])
@@ -59,7 +53,6 @@ module Api
           end
         end
 
-        # If params[:status]
         if params[:status].present?
           if params[:status] == 'past'
             base_scope = base_scope.where("appointment_time < ?", Time.now)
@@ -68,7 +61,6 @@ module Api
           end
         end
 
-        # Paginate
         page     = (params[:page].presence || 1).to_i
         per_page = (params[:per_page].presence || 10).to_i
 
@@ -106,6 +98,8 @@ module Api
         )
 
         if appointment.save
+          # Send booking confirmation mailer
+          AppointmentMailer.booking_confirmation(appointment).deliver_later
           render json: appointment_to_camel(appointment), status: :created
         else
           render json: { errors: appointment.errors.full_messages }, status: :unprocessable_entity
@@ -134,7 +128,18 @@ module Api
           return render json: { error: 'Not authorized' }, status: :forbidden
         end
 
+        # Capture old values so we can check if certain fields changed
+        old_time           = appointment.appointment_time
+        old_dentist        = appointment.dentist_id
+        old_appointment_type = appointment.appointment_type_id
+
         if appointment.update(appointment_params)
+          # If date/time or dentist or type changed => consider it a reschedule
+          if (appointment.appointment_time != old_time) ||
+             (appointment.dentist_id != old_dentist) ||
+             (appointment.appointment_type_id != old_appointment_type)
+            AppointmentMailer.reschedule_notification(appointment).deliver_later
+          end
           render json: appointment_to_camel(appointment), status: :ok
         else
           render json: { errors: appointment.errors.full_messages }, status: :unprocessable_entity
@@ -150,8 +155,13 @@ module Api
           return render json: { error: 'Not authorized' }, status: :forbidden
         end
 
-        appointment.destroy
-        render json: { message: 'Appointment canceled.' }, status: :ok
+        if appointment.destroy
+          # After destroy => cancellation email
+          AppointmentMailer.cancellation_notification(appointment).deliver_later
+          render json: { message: 'Appointment canceled.' }, status: :ok
+        else
+          render json: { errors: appointment.errors.full_messages }, status: :unprocessable_entity
+        end
       end
 
       # PATCH /api/v1/appointments/:id/check_in
@@ -198,6 +208,7 @@ module Api
                            .order(:appointment_time)
         appts = appts.where.not(id: ignore_id) if ignore_id
 
+        # Map to simplified structure
         results = appts.map do |appt|
           {
             id:              appt.id,
@@ -255,7 +266,7 @@ module Api
             role:      appt.user.role
           },
 
-          dependentId:  appt.dependent_id,
+          dependentId: appt.dependent_id,
           dependent: appt.dependent && {
             id:          appt.dependent.id,
             firstName:   appt.dependent.first_name,
