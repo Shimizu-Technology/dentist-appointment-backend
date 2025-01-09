@@ -26,14 +26,19 @@ module Api
         if params[:q].present?
           search = params[:q].strip.downcase
           base_scope = base_scope.joins(:user).where(
-            "LOWER(users.first_name) LIKE :s 
-             OR LOWER(users.last_name) LIKE :s 
-             OR LOWER(users.email) LIKE :s
-             OR CAST(users.id AS TEXT) = :exact_s",
-            s: "%#{search}%", exact_s: search
+            %q{
+              LOWER(users.first_name) LIKE :s
+              OR LOWER(users.last_name) LIKE :s
+              OR LOWER(users.first_name || ' ' || users.last_name) LIKE :s
+              OR LOWER(users.email) LIKE :s
+              OR CAST(users.id AS TEXT) = :exact_s
+            },
+            s: "%#{search}%",
+            exact_s: search
           )
         end
 
+        # For dentist_name filter if desired:
         if params[:dentist_name].present?
           name_search = params[:dentist_name].strip.downcase
           base_scope = base_scope.joins(:dentist).where(
@@ -42,6 +47,7 @@ module Api
           )
         end
 
+        # If params[:date], parse it and filter by that day
         if params[:date].present?
           begin
             date_obj = Date.parse(params[:date])
@@ -53,6 +59,7 @@ module Api
           end
         end
 
+        # If params[:status]
         if params[:status].present?
           if params[:status] == 'past'
             base_scope = base_scope.where("appointment_time < ?", Time.now)
@@ -61,6 +68,7 @@ module Api
           end
         end
 
+        # Paginate
         page     = (params[:page].presence || 1).to_i
         per_page = (params[:per_page].presence || 10).to_i
 
@@ -80,7 +88,6 @@ module Api
 
       # POST /api/v1/appointments
       def create
-        # If admin can pass user_id param, use that. Otherwise use current_user
         chosen_user_id = if current_user.admin? && appointment_params[:user_id].present?
                            appointment_params[:user_id]
                          else
@@ -109,13 +116,10 @@ module Api
       def show
         appointment = Appointment.includes(:dentist, :appointment_type, :user, :dependent)
                                  .find_by(id: params[:id])
-
-        # If not found at all => return 404
         return render_not_found unless appointment
 
-        # Admin => can see anything; else must be your own
         unless current_user.admin? || appointment.user_id == current_user.id
-          return render json: { error: "Not authorized" }, status: :forbidden
+          return render json: { error: 'Not authorized' }, status: :forbidden
         end
 
         render json: appointment_to_camel(appointment), status: :ok
@@ -127,7 +131,7 @@ module Api
         return render_not_found unless appointment
 
         unless current_user.admin? || appointment.user_id == current_user.id
-          return render json: { error: "Not authorized" }, status: :forbidden
+          return render json: { error: 'Not authorized' }, status: :forbidden
         end
 
         if appointment.update(appointment_params)
@@ -143,11 +147,11 @@ module Api
         return render_not_found unless appointment
 
         unless current_user.admin? || appointment.user_id == current_user.id
-          return render json: { error: "Not authorized" }, status: :forbidden
+          return render json: { error: 'Not authorized' }, status: :forbidden
         end
 
         appointment.destroy
-        render json: { message: "Appointment canceled." }, status: :ok
+        render json: { message: 'Appointment canceled.' }, status: :ok
       end
 
       # PATCH /api/v1/appointments/:id/check_in
@@ -168,7 +172,6 @@ module Api
         date_str   = params[:date]
         ignore_id  = params[:ignore_id]
 
-        # Check if globally closed
         if ClosedDay.exists?(date: date_str)
           return render json: {
             appointments: [],
@@ -178,12 +181,12 @@ module Api
         end
 
         if dentist_id.blank? || date_str.blank?
-          return render json: { error: "Missing dentist_id or date" }, status: :unprocessable_entity
+          return render json: { error: 'Missing dentist_id or date' }, status: :unprocessable_entity
         end
 
         date_obj = Date.parse(date_str) rescue nil
         unless date_obj
-          return render json: { error: "Invalid date format" }, status: :unprocessable_entity
+          return render json: { error: 'Invalid date format' }, status: :unprocessable_entity
         end
 
         start_of_day = date_obj.beginning_of_day
@@ -193,7 +196,6 @@ module Api
                            .where(dentist_id: dentist_id)
                            .where(appointment_time: start_of_day..end_of_day)
                            .order(:appointment_time)
-
         appts = appts.where.not(id: ignore_id) if ignore_id
 
         results = appts.map do |appt|
