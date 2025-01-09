@@ -1,10 +1,10 @@
 # File: app/controllers/api/v1/users_controller.rb
-
 module Api
   module V1
     class UsersController < BaseController
-      # By default, we do NOT skip authentication, so an admin must be logged in
-      # to access these actions.
+      # Everything remains the same up top...
+      # We require admin for :index, :create, :update, :destroy, :promote, :search
+      # The only exception is patch /users/current => for the currently logged in user
 
       # GET /api/v1/users (Admin-only, paginated)
       def index
@@ -27,19 +27,13 @@ module Api
         }, status: :ok
       end
 
-      # POST /api/v1/users
-      # => Admin creation (invitation-based)
-      #
-      # Only an admin can create a new user here. (No password param is required,
-      # because we send an invitation email if they have an email address.)
+      # POST /api/v1/users (Admin creation)
       def create
         return not_admin unless current_user&.admin?
-
         admin_create_user
       end
 
-      # PATCH /api/v1/users/current
-      # => Allows the *currently logged-in user* to update their own data
+      # PATCH /api/v1/users/current (for user updating their own info)
       def current
         unless @current_user
           return render json: { error: 'Unauthorized' }, status: :unauthorized
@@ -52,9 +46,7 @@ module Api
         end
       end
 
-      # PATCH /api/v1/users/:id/promote  (Admin-only)
-      #
-      # Example usage: promote a user to admin
+      # PATCH /api/v1/users/:id/promote (Admin-only)
       def promote
         return not_admin unless current_user&.admin?
 
@@ -67,8 +59,6 @@ module Api
       end
 
       # GET /api/v1/users/search?q=...
-      # => Admin-only search. Supports partial matching by first_name, last_name,
-      #    *full_name* (first + last), and email, all in LOWER(...) for case-insensitivity.
       def search
         return not_admin unless current_user&.admin?
 
@@ -110,6 +100,28 @@ module Api
         }, status: :ok
       end
 
+      # PATCH /api/v1/users/:id (Admin-only)
+      def update
+        return not_admin unless current_user&.admin?
+
+        user = User.find(params[:id])
+        # e.g. user_params_for_admin_update includes phone, email, first_name, last_name, role
+        if user.update(user_params_for_admin_update)
+          render json: user_to_camel(user), status: :ok
+        else
+          render json: { errors: user.errors.full_messages }, status: :unprocessable_entity
+        end
+      end
+
+      # DELETE /api/v1/users/:id (Admin-only)
+      def destroy
+        return not_admin unless current_user&.admin?
+
+        user = User.find(params[:id])
+        user.destroy
+        render json: { message: 'User deleted successfully' }, status: :ok
+      end
+
       private
 
       # ----------------------------------------------------------------
@@ -119,13 +131,11 @@ module Api
         user = User.new(user_params_for_admin_create)
         user.role ||= 'user'
 
-        # If user is not phone_only and has an email => generate invitation
         if !user.phone_only? && user.email.present?
           user.generate_invitation_token!
         end
 
         if user.save
-          # Send invitation email if user has email + not phone_only
           if user.email.present? && !user.phone_only?
             AdminUserMailer.invitation_email(user).deliver_later
           end
@@ -140,7 +150,6 @@ module Api
       # ----------------------------------------------------------------
       # PERMITTED PARAMS
       # ----------------------------------------------------------------
-      # For an admin creating a user: no password param => invitation-based flow
       def user_params_for_admin_create
         params.require(:user).permit(
           :email,
@@ -151,7 +160,19 @@ module Api
         )
       end
 
-      # For patch /users/current (including insurance fields)
+      def user_params_for_admin_update
+        # Admin can update these fields
+        params.require(:user).permit(
+          :email,
+          :phone,
+          :first_name,
+          :last_name,
+          :role
+          # Add :password if you also want admins to set/force a new password
+        )
+      end
+
+      # For patch /users/current
       def user_update_params
         params.require(:user).permit(
           :first_name,

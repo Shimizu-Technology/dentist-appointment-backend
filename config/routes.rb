@@ -41,7 +41,7 @@ Rails.application.routes.draw do
       resources :specialties
 
       # Users (admin usage)
-      resources :users, only: [:create, :index] do
+      resources :users, only: [:create, :index, :update, :destroy] do
         collection do
           patch :current   # Update current user
           get :search      # Search users
