@@ -156,8 +156,8 @@ module Api
         end
 
         if appointment.destroy
-          # After destroy => cancellation email
-          AppointmentMailer.cancellation_notification(appointment).deliver_later
+          # Change it to deliver_now so that way it delivers the email right away instead of waiting for it to be deleted and then attempting to find that appointment which doesn't exist
+          AppointmentMailer.cancellation_notification(appointment).deliver_now
           render json: { message: 'Appointment canceled.' }, status: :ok
         else
           render json: { errors: appointment.errors.full_messages }, status: :unprocessable_entity
