@@ -1,5 +1,3 @@
-<!-- File: app/views/admin_user_mailer/invitation_email.html.erb -->
-
 <!DOCTYPE html>
 <html>
   <head>
@@ -7,54 +5,89 @@
     <title>Finish Your ISA Dental Account</title>
     <style>
       body {
-        margin: 0; padding: 0;
+        margin: 0; 
+        padding: 0;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         background-color: #f7fafc;
       }
+      .header-banner {
+        background: #337ab7; /* or your brand color (#2B6CB0, etc.) */
+        padding: 24px;
+        text-align: center;
+        color: #fff;
+        font-size: 24px;
+        font-weight: 600;
+      }
       .email-wrapper {
-        max-width: 600px; margin: 40px auto; padding: 24px;
-        background: #fff; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        max-width: 600px;
+        margin: 0 auto;
+        background: #fff;
+        padding: 24px;
       }
       .heading {
-        font-size: 24px; font-weight: 600; margin-bottom: 16px; color: #2d3748;
+        font-size: 28px;
+        font-weight: 600;
+        margin-bottom: 16px;
+        color: #2d3748;
       }
       p {
-        font-size: 16px; line-height: 1.5; color: #4a5568;
+        font-size: 16px; 
+        line-height: 1.5; 
+        color: #4a5568; 
+        margin: 0 0 16px;
       }
       .btn {
-        display: inline-block; margin-top: 16px; padding: 12px 24px;
-        background: #3182ce; color: #fff; border-radius: 4px;
-        text-decoration: none; font-weight: 500;
+        display: inline-block;
+        margin-top: 20px;
+        padding: 14px 28px;
+        background: #2B6CB0;   /* Button background */
+        color: #ffffff !important;        /* White text for better visibility */
+        border-radius: 4px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 16px;
+        transition: background 0.2s ease;
+      }
+      .btn:hover {
+        background: #1E40AF;  /* Slightly darker on hover */
+        color: #ffffff;       /* Keep text white on hover */
       }
       .footer {
-        margin-top: 24px; font-size: 14px; color: #a0aec0; text-align: center;
+        margin-top: 24px; 
+        font-size: 14px; 
+        color: #a0aec0; 
+        text-align: center;
       }
     </style>
   </head>
   <body>
+
+    <div class="header-banner">
+      ISA Dental
+    </div>
+
     <div class="email-wrapper">
       <h1 class="heading">Welcome to ISA Dental!</h1>
-
       <p>Hi <%= @user.first_name %>,</p>
 
       <p>
-        We’ve created an account for you. To finish setting up your account and choose your password,
-        please click the button below:
+        We’ve created an account for you. To finish setting up your account and choose your
+        password, please click the button below:
       </p>
 
       <p>
-        <a class="btn" href="<%= @invitation_url %>">Finish Your Account Setup</a>
+        <a class="btn" href="<%= @invitation_url %>" target="_blank">
+          Finish Your Account Setup
+        </a>
       </p>
 
       <p>If the button isn’t working, copy and paste this link in your browser:</p>
       <p><%= @invitation_url %></p>
 
-      <p>
-        We look forward to helping you with all your dental needs.
-      </p>
+      <p>We look forward to helping you with all your dental needs!</p>
 
       <div class="footer">
-        &copy; <%= Time.now.year %> ISA Dental — All rights reserved.
+        &copy; <%= Time.now.year %> ISA Dental &mdash; All rights reserved.
       </div>
     </div>
   </body>
