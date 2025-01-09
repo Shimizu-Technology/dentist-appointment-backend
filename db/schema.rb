@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_01_07_171233) do
+ActiveRecord::Schema[7.2].define(version: 2025_01_09_054910) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -94,7 +94,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_07_171233) do
   end
 
   create_table "users", force: :cascade do |t|
-    t.string "email", default: "", null: false
+    t.string "email", default: ""
     t.string "password_digest", default: "", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
@@ -108,7 +108,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_07_171233) do
     t.boolean "force_password_reset", default: false, null: false
     t.string "invitation_token"
     t.datetime "invitation_sent_at"
-    t.index ["email"], name: "index_users_on_email", unique: true
+    t.index ["email"], name: "index_users_on_email", unique: true, where: "(email IS NOT NULL)"
   end
 
   add_foreign_key "appointments", "appointment_types"
