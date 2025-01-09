@@ -3,7 +3,7 @@
 module Api
   module V1
     class UsersController < BaseController
-      skip_before_action :authenticate_user!, only: [:create]
+      # We no longer skip authentication here; we require admin for everything except maybe :current
 
       # GET /api/v1/users (Admin-only, paginated)
       def index
@@ -26,41 +26,20 @@ module Api
         }, status: :ok
       end
 
-      # POST /api/v1/users
+      # POST /api/v1/users (ADMIN creation)
+      #
+      # Only an admin can create a new user here (invitation-based).
+      # If you'd like to do phone_only user creation or 'user' role, that’s allowed,
+      # but we generate an invitation token if email is present.
       def create
-        # Build the user from params
-        user = User.new(user_params_for_create)
+        return not_admin unless current_user&.admin?
 
-        # If no role is passed in, default it to 'user'
-        user.role ||= 'user'
-
-        # If phone_only => no email needed, no password needed.
-        # If normal user => no password is given here; we generate an invitation if they have an email
-        if !user.phone_only? && user.email.present?
-          user.generate_invitation_token!
-        end
-
-        # Overrule an attempt to set role=admin if not currently admin
-        if !current_user&.admin? && user.role == 'admin'
-          user.role = 'user'
-        end
-
-        if user.save
-          # If user has an email and is not phone_only, send invitation
-          if user.email.present? && !user.phone_only?
-            # Our new “invitation_email” method
-            AdminUserMailer.invitation_email(user).deliver_later
-          end
-
-          # Return a JWT or simply return the user.
-          token = JWT.encode({ user_id: user.id }, Rails.application.credentials.secret_key_base)
-          render json: { jwt: token, user: user_to_camel(user) }, status: :created
-        else
-          render json: { errors: user.errors.full_messages }, status: :unprocessable_entity
-        end
+        admin_create_user
       end
 
       # PATCH /api/v1/users/current
+      #
+      # Allows the currently logged-in user to update their own data (e.g. insurance info).
       def current
         unless @current_user
           return render json: { error: 'Unauthorized' }, status: :unauthorized
@@ -73,7 +52,7 @@ module Api
         end
       end
 
-      # PATCH /api/v1/users/:id/promote
+      # PATCH /api/v1/users/:id/promote (Admin-only)
       def promote
         return not_admin unless current_user&.admin?
 
@@ -125,9 +104,39 @@ module Api
 
       private
 
-      def user_params_for_create
-        # NOTE: We do NOT permit password here since we rely on invitation-based or phone_only approach
-        # But we do allow :role, in case an admin tries to pass role=admin, which we guard above
+      # ----------------------------------------------------------------
+      # 1) ADMIN CREATION (invitation-based)
+      # ----------------------------------------------------------------
+      def admin_create_user
+        user = User.new(user_params_for_admin_create)
+        user.role ||= 'user'
+
+        # If user is not phone_only and has an email => generate invitation
+        if !user.phone_only? && user.email.present?
+          user.generate_invitation_token!
+        end
+
+        if user.save
+          # Send invitation email if user has email + not phone_only
+          if user.email.present? && !user.phone_only?
+            AdminUserMailer.invitation_email(user).deliver_later
+          end
+
+          token = JWT.encode(
+            { user_id: user.id },
+            Rails.application.credentials.secret_key_base
+          )
+          render json: { jwt: token, user: user_to_camel(user) }, status: :created
+        else
+          render json: { errors: user.errors.full_messages }, status: :unprocessable_entity
+        end
+      end
+
+      # ----------------------------------------------------------------
+      # PERMITTED PARAMS
+      # ----------------------------------------------------------------
+      # For an admin creating a user, we don’t require a password param => invitation-based flow.
+      def user_params_for_admin_create
         params.require(:user).permit(
           :email,
           :phone,
@@ -137,8 +146,7 @@ module Api
         )
       end
 
-      # For updating the current user, we also allow insurance fields
-      # (provider_name, policy_number, plan_type).
+      # For patch /users/current (including insurance fields)
       def user_update_params
         params.require(:user).permit(
           :first_name,
@@ -153,27 +161,25 @@ module Api
 
       def user_to_camel(u)
         {
-          id: u.id,
-          email: u.email,
-          role: u.role,
-          firstName: u.first_name,
-          lastName: u.last_name,
-          phone: u.phone,
+          id:                  u.id,
+          email:               u.email,
+          role:                u.role,
+          firstName:           u.first_name,
+          lastName:            u.last_name,
+          phone:               u.phone,
           insuranceInfo: (u.provider_name ? {
-            providerName: u.provider_name,
-            policyNumber: u.policy_number,
-            planType:     u.plan_type
+            providerName:   u.provider_name,
+            policyNumber:   u.policy_number,
+            planType:       u.plan_type
           } : nil),
-          forcePasswordReset: u.force_password_reset,
-          invitationToken: u.invitation_token
+          forcePasswordReset:  u.force_password_reset,
+          invitationToken:     u.invitation_token
         }
       end
 
       def not_admin
-        render json: { error: "Not authorized (admin only)" }, status: :forbidden
+        render json: { error: 'Not authorized (admin only)' }, status: :forbidden
       end
     end
   end
 end
-
-  

@@ -6,6 +6,10 @@ Rails.application.routes.draw do
       # Sessions / Auth
       post '/login', to: 'sessions#create'
 
+      # Public self-signup route
+      post '/signup', to: 'signups#create'
+      # e.g., a user can create their account with email + password
+
       # Finish invitation
       patch '/invitations/finish', to: 'invitations#finish'
 
@@ -36,7 +40,7 @@ Rails.application.routes.draw do
       # Specialties
       resources :specialties
 
-      # Users
+      # Users (admin usage)
       resources :users, only: [:create, :index] do
         collection do
           patch :current   # Update current user
