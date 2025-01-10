@@ -19,6 +19,7 @@ module Api
                                    .where(user_id: current_user.id)
         end
 
+        # Optional search by user name/email/user_id
         if params[:q].present?
           search = params[:q].strip.downcase
           base_scope = base_scope.joins(:user).where(
@@ -34,6 +35,7 @@ module Api
           )
         end
 
+        # Optional search by dentist name
         if params[:dentist_name].present?
           name_search = params[:dentist_name].strip.downcase
           base_scope = base_scope.joins(:dentist).where(
@@ -42,6 +44,7 @@ module Api
           )
         end
 
+        # Optional date filter
         if params[:date].present?
           begin
             date_obj = Date.parse(params[:date])
@@ -53,6 +56,7 @@ module Api
           end
         end
 
+        # Optional status filter
         if params[:status].present?
           if params[:status] == 'past'
             base_scope = base_scope.where("appointment_time < ?", Time.now)
@@ -156,7 +160,7 @@ module Api
         end
 
         if appointment.destroy
-          # Change it to deliver_now so that way it delivers the email right away instead of waiting for it to be deleted and then attempting to find that appointment which doesn't exist
+          # Immediately deliver cancellation email
           AppointmentMailer.cancellation_notification(appointment).deliver_now
           render json: { message: 'Appointment canceled.' }, status: :ok
         else

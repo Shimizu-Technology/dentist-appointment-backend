@@ -10,9 +10,19 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_01_09_054910) do
+ActiveRecord::Schema[7.2].define(version: 2025_01_09_135531) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
+
+  create_table "appointment_reminders", force: :cascade do |t|
+    t.bigint "appointment_id", null: false
+    t.datetime "send_at", null: false
+    t.boolean "sent", default: false
+    t.datetime "sent_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["appointment_id"], name: "index_appointment_reminders_on_appointment_id"
+  end
 
   create_table "appointment_types", force: :cascade do |t|
     t.string "name"
@@ -111,6 +121,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_09_054910) do
     t.index ["email"], name: "index_users_on_email", unique: true, where: "(email IS NOT NULL)"
   end
 
+  add_foreign_key "appointment_reminders", "appointments"
   add_foreign_key "appointments", "appointment_types"
   add_foreign_key "appointments", "dentists"
   add_foreign_key "appointments", "dependents"

@@ -6,8 +6,14 @@ class Appointment < ApplicationRecord
   belongs_to :appointment_type
   belongs_to :dependent, optional: true
 
+  # --------- NEW: Destroy associated reminders if appointment is deleted -------
+  has_many :appointment_reminders, dependent: :destroy
+
   before_create :set_default_status
-  before_create :default_checked_in  # <-- NEW callback to ensure checked_in = false if nil
+  before_create :default_checked_in
+
+  # Optional: if you are auto-creating reminders for “day-of” + “day-before”
+  after_create :create_appointment_reminders
 
   validate :clinic_not_closed_on_this_date
   validate :within_clinic_hours
@@ -20,23 +26,39 @@ class Appointment < ApplicationRecord
     self.status ||= 'scheduled'
   end
 
-  # Ensure checked_in is never nil (PG constraint requires NOT NULL).
   def default_checked_in
     self.checked_in = false if checked_in.nil?
   end
 
-  # -------------------------------------------
-  # Instead of “Sunday is closed,” we use the
-  # clinic_settings to see which days are open,
-  # and also check closed_days.
-  # -------------------------------------------
+  # ------------------------------------------------------------------
+  # ONLY INCLUDE THIS if you want to automatically create *two* reminders:
+  #   1) day before at 8:00 AM
+  #   2) day of at 8:00 AM
+  # Otherwise, remove or adapt to your own logic.
+  # ------------------------------------------------------------------
+  def create_appointment_reminders
+    local_appt = appointment_time.in_time_zone(Rails.configuration.time_zone)
+
+    # For the day-of: e.g. 8:00 AM same day
+    day_of_8am = local_appt.change(hour: 8, min: 0, sec: 0)
+
+    # For the day-before: 8:00 AM
+    day_before_8am = day_of_8am - 1.day
+
+    AppointmentReminder.create!(
+      appointment_id: id,
+      send_at: day_of_8am.utc
+    )
+
+    AppointmentReminder.create!(
+      appointment_id: id,
+      send_at: day_before_8am.utc
+    )
+  end
+
   def clinic_not_closed_on_this_date
     setting = ClinicSetting.singleton
-
-    # Convert "1,2,3,4,5" => [1,2,3,4,5]
     open_days = setting.open_days.split(',').map(&:to_i)
-
-    # 0=Sunday, 1=Monday, 2=Tuesday, ...
     wday = appointment_time.wday
 
     unless open_days.include?(wday)
@@ -44,7 +66,6 @@ class Appointment < ApplicationRecord
       return
     end
 
-    # Check single-day closures from the closed_days table:
     if ClosedDay.exists?(date: appointment_time.to_date)
       errors.add(:base, "The clinic is closed on #{appointment_time.to_date}.")
     end
@@ -52,22 +73,17 @@ class Appointment < ApplicationRecord
 
   def within_clinic_hours
     setting = ClinicSetting.singleton
-    open_t  = setting.open_time   # "09:00"
-    close_t = setting.close_time  # "17:00"
+    open_hour, open_min   = setting.open_time.split(':').map(&:to_i)
+    close_hour, close_min = setting.close_time.split(':').map(&:to_i)
 
-    open_hour, open_min   = open_t.split(':').map(&:to_i)
-    close_hour, close_min = close_t.split(':').map(&:to_i)
-
-    # Convert appointment_time to local time, if stored in UTC:
     appt_local = appointment_time.in_time_zone(Rails.configuration.time_zone)
+    date_str   = appt_local.strftime('%Y-%m-%d')
 
-    # build local open_dt, close_dt
-    date_str = appt_local.strftime('%Y-%m-%d')
     open_dt  = Time.zone.parse("#{date_str} #{open_hour}:#{open_min}")
     close_dt = Time.zone.parse("#{date_str} #{close_hour}:#{close_min}")
 
-    unless (appt_local >= open_dt && appt_local < close_dt)
-      errors.add(:base, "Appointment time must be between #{open_t} and #{close_t}.")
+    unless appt_local >= open_dt && appt_local < close_dt
+      errors.add(:base, "Appointment time must be between #{setting.open_time} and #{setting.close_time}.")
     end
   end
 
