@@ -36,12 +36,13 @@ class SendAppointmentRemindersJob < ApplicationJob
     # Create a user-friendly time string
     appt_time_str = appointment.appointment_time.strftime('%B %d at %I:%M %p')
 
-    # Build the SMS body with a hardcoded URL
+    # Build the SMS body
+    # Keep it simpler so that it does not contain a direct link that triggers "RESTRICTED_URL".
     message_body = <<~TEXT.squish
       Hi #{user.first_name}, 
       this is a reminder from ISA Dental for your appointment on #{appt_time_str}.
       If you need to reschedule or cancel, please call us at (671) 646-7982
-      or visit https://isa-dental-appt.netlify.app for more options.
+      or visit our website for more options.
     TEXT
 
     Rails.logger.debug("[SendAppointmentRemindersJob] Attempting to send SMS to #{user.phone} (ReminderID=#{reminder.id}).")
