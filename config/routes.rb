@@ -23,6 +23,9 @@ Rails.application.routes.draw do
         end
       end
 
+      # Appointment Reminders
+      resources :appointment_reminders, only: [:index, :update]
+
       # Dependents
       resources :dependents, only: [:index, :create, :update, :destroy]
 

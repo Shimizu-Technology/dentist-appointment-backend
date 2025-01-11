@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_01_10_110714) do
+ActiveRecord::Schema[7.2].define(version: 2025_01_11_030451) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -21,6 +21,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_10_110714) do
     t.datetime "sent_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.text "message"
+    t.string "phone"
+    t.string "status", default: "queued"
     t.index ["appointment_id"], name: "index_appointment_reminders_on_appointment_id"
   end
 
