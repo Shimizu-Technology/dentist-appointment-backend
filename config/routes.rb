@@ -1,16 +1,10 @@
 # File: config/routes.rb
-
 Rails.application.routes.draw do
   namespace :api do
     namespace :v1 do
       # Sessions / Auth
       post '/login', to: 'sessions#create'
-
-      # Public self-signup route
       post '/signup', to: 'signups#create'
-      # e.g., a user can create their account with email + password
-
-      # Finish invitation
       patch '/invitations/finish', to: 'invitations#finish'
 
       # Appointments
@@ -19,14 +13,14 @@ Rails.application.routes.draw do
           get :day_appointments
         end
         member do
-          patch :check_in  # Toggle/check-in an appointment
+          patch :check_in
         end
       end
 
       # Appointment Reminders
       resources :appointment_reminders, only: [:index, :update]
 
-      # Dependents
+      # Dependents for the **current user** scenario
       resources :dependents, only: [:index, :create, :update, :destroy]
 
       # Appointment Types
@@ -35,29 +29,32 @@ Rails.application.routes.draw do
       # Dentists
       resources :dentists, only: [:index, :show, :create, :update, :destroy] do
         member do
-          get :availabilities     # GET /api/v1/dentists/:id/availabilities
-          post :upload_image      # POST /api/v1/dentists/:id/upload_image
+          get :availabilities
+          post :upload_image
         end
       end
 
       # Specialties
       resources :specialties
 
-      # Users (admin usage)
+      # Nested dependents for an admin controlling a specific user:
       resources :users, only: [:create, :index, :update, :destroy] do
+        # This route means => POST /api/v1/users/:user_id/dependents
+        resources :dependents, only: [:create, :update, :destroy], module: :users
+
         collection do
-          patch :current   # Update current user
-          get :search      # Search users
+          patch :current
+          get :search
         end
         member do
-          patch :promote   # Promote user to admin
+          patch :promote
         end
       end
 
       # Closed Days
       resources :closed_days, only: [:index, :create, :destroy]
 
-      # Schedules => single resource (singular)
+      # Schedules => single resource
       resource :schedule, only: [:show, :update], controller: :schedules
 
       # Dentist Unavailabilities
