@@ -2,7 +2,14 @@
 module Api
   module V1
     class DentistUnavailabilitiesController < BaseController
-      before_action :require_admin!
+      before_action :require_admin!, except: [:index]
+
+      # GET /api/v1/dentist_unavailabilities
+      # Return all unavailability blocks, ordered by date and start_time
+      def index
+        blocks = DentistUnavailability.order(:date, :start_time)
+        render json: blocks.map { |b| to_camel(b) }, status: :ok
+      end
 
       def create
         block = DentistUnavailability.new(dentist_unavailability_params)

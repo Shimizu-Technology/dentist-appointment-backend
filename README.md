@@ -8,10 +8,9 @@ This project is a **Ruby on Rails** API for scheduling dentist appointments for 
 4. **Multiple dentists** supporting specialized care (e.g., pediatric vs. adult).  
 5. **Appointment types** (e.g., “Cleaning,” “Filling,” “Checkup,” etc.) that admins can create and manage.  
 6. **Admin user-management** (list all users, promote user to admin role, invite users by email).  
-7. **Flow for Appointment Status** (e.g., “scheduled” -> “completed” -> “cancelled”).  
+7. **Flow for Appointment Status** (e.g., “scheduled” → “completed” → “canceled”).  
 8. **Email invitations** for new users, using **SendGrid**.  
-
-This README provides setup instructions, usage examples, and endpoint documentation.
+9. **SMS Reminders** via **ClickSend**, with a scheduled cron job to automatically send reminders.
 
 ---
 
@@ -32,9 +31,11 @@ This README provides setup instructions, usage examples, and endpoint documentat
    - [Users (Admin Only)](#users-admin-only)  
 7. [S3 Image Upload (Dentist Photos)](#s3-image-upload-dentist-photos)
 8. [Email Invitations (SendGrid)](#email-invitations-sendgrid)
-9. [Environment Variables](#environment-variables)  
-10. [Deployment](#deployment)  
-11. [Future Enhancements / Next Steps](#future-enhancements--next-steps)
+9. [SMS Reminders (ClickSend)](#sms-reminders-clicksend)
+10. [Environment Variables](#environment-variables)  
+11. [Deployment](#deployment)  
+12. [Hosting and Links](#hosting-and-links)
+13. [Future Enhancements / Next Steps](#future-enhancements--next-steps)
 
 ---
 
@@ -98,7 +99,7 @@ You can then access the API at:
 
 This API uses **JWT-based authentication**. To authenticate:
 
-1. **Request a token** via `POST /api/v1/login` by sending valid user credentials (`email`, `password`).  
+1. **Request a token** via `POST /api/v1/login` with valid user credentials (`email`, `password`).  
 2. **Receive a JWT** in the response.  
 3. **Include** that token in subsequent requests in the **Authorization** header:
 
@@ -157,276 +158,165 @@ All endpoints below **require** a valid JWT token in the `Authorization` header.
   **Description**: Returns all appointments.  
   - If the current user is **admin**, returns **all** appointments.
   - If a **regular user**, returns only that user’s appointments (and their dependents’).  
-  - Accepts optional query parameters such as `page`, `per_page`, or `dentist_id` (if you want to filter by dentist).
+  - Accepts optional query parameters such as `page`, `per_page`, `dentist_id`, etc.
 
 - **`GET /api/v1/appointments/:id`**  
-  **Description**: Show a specific appointment by `id`.  
-  - Admin can see any appointment.  
-  - Regular user can only see an appointment if it belongs to them or one of their dependents.
+  Show a specific appointment by `id`.  
+  - Admin sees any appointment.  
+  - Regular user only sees appointments for themselves or their dependent.
 
 - **`POST /api/v1/appointments`**  
-  **Description**: Create a new appointment for the current user (or their dependent).  
-  **Conflict Checks**:  
-  - The system checks if the `dentist_id` + `appointment_time` is already taken with a `status` of `"scheduled"`.  
-  - Clinic-closed days or dentist unavailability may also block the requested time.
-
-  **Request Body** typically includes:
-  ```json
-  {
-    "appointment": {
-      "dentist_id": 1,
-      "appointment_type_id": 2,
-      "appointment_time": "2025-06-10T09:00:00Z",
-      "dependent_id": 3,
-      "notes": "...",
-      "status": "scheduled"
-    }
-  }
-  ```
-  (If `dependent_id` is omitted, it defaults to the main user.)
+  Create a new appointment for the current user (or their dependent).  
+  - Checks conflicts (dentist availability, closed days, etc.).
 
 - **`PATCH/PUT /api/v1/appointments/:id`**  
-  **Description**: Update an existing appointment’s fields (e.g., time, dentist, or status).  
-  - Common usage includes marking an appointment from `scheduled` to `completed`.  
-  - Conflict checks still apply if you change `appointment_time` or `dentist_id`.
-
-  **Example**:  
-  ```json
-  {
-    "appointment": {
-      "status": "completed"
-    }
-  }
-  ```
-  This would mark the appointment as completed.
+  Update an existing appointment’s fields (e.g., changing status from “scheduled” to “completed”).
 
 - **`DELETE /api/v1/appointments/:id`**  
-  **Description**: Cancels or deletes an appointment by ID.  
-  - Admin can delete any appointment.  
-  - Regular user can only delete if it belongs to them or a dependent.
+  Cancels or deletes an appointment by ID.
 
 ---
 
 ### Dependents
 
-All endpoints require a valid JWT token.
-
 - **`GET /api/v1/dependents`**  
-  - **Admin**: sees **all** dependents.  
-  - **Regular user**: sees only **their own** dependents.
-
+  Admin sees all; a user sees only their own.
 - **`POST /api/v1/dependents`**  
-  Create a dependent for the currently logged-in user.  
-
 - **`PATCH/PUT /api/v1/dependents/:id`**  
-  Update a dependent’s details.  
-  - Admin can update **any** dependent; user can only update their own.
-
 - **`DELETE /api/v1/dependents/:id`**  
-  Remove a dependent.  
-  - Admin can delete any dependent; user can only delete their own.
 
 ---
 
 ### Dentists
 
-- **`GET /api/v1/dentists`** (public)  
-  Returns a list of all dentists.  
-
-- **`GET /api/v1/dentists/:id`** (public)  
-  Show details for a single dentist.  
-
+- **`GET /api/v1/dentists`**  
+  Public route listing all dentists.
+- **`GET /api/v1/dentists/:id`**  
+  Show a single dentist.
 - **`GET /api/v1/dentists/:id/availabilities`**  
-  Returns the dentist’s “unavailability” blocks (dates/times they’re unavailable).
-
-- **`POST /api/v1/dentists`** (admin only)  
-  Create a new dentist record.  
-
-- **`PATCH/PUT /api/v1/dentists/:id`** (admin only)  
-  Update a dentist’s info (name, specialty, image, etc.).  
-
-- **`DELETE /api/v1/dentists/:id`** (admin only)  
-  Remove a dentist record.
+  Returns the “unavailable” blocks for that dentist.
+- **Admin-only**: Create, Update, Destroy, plus `POST /api/v1/dentists/:id/upload_image` for uploading a dentist photo.
 
 ---
 
 ### Appointment Types
 
 - **`GET /api/v1/appointment_types`** (public)  
-- **`GET /api/v1/appointment_types/:id`** (public)  
-- **`POST /api/v1/appointment_types`** (admin only)  
-- **`PATCH/PUT /api/v1/appointment_types/:id`** (admin only)  
-- **`DELETE /api/v1/appointment_types/:id`** (admin only)
+- **Admin-only**: Create, Update, Destroy
 
 ---
 
 ### Admin Endpoints
 
-Most “admin” functionality is integrated into the resource controllers above (Dentists, Appointment Types, and Appointments). For clarity, these require `admin?`:
+- **`GET /api/v1/users`** (lists all users)  
+- **`PATCH /api/v1/users/:id/promote`** (promote a user to admin)  
+- **Search** users by name/email  
+- **Manage** closed days, clinic schedule, dentist unavailabilities, etc.
 
-- **Dentists**  
-- **Appointment Types**  
-- **Appointments** (admin sees all, can update/delete all)
-- **Clinic Schedules** (open/close times, closed days, dentist unavailabilities)
+---
 
 ### Users (Admin Only)
 
-We’ve also added routes to allow **admin** users to manage other user accounts:
-
-- **`GET /api/v1/users`**  
-  Returns a list of all users (admin-only).  
-
-- **`POST /api/v1/users`**  
-  Create a new user. This also supports an **invitation** email flow (see **[Email Invitations](#email-invitations-sendgrid)** below).  
-
-- **`PATCH /api/v1/users/current`**  
-  Update the **currently logged-in** user’s fields (e.g., first name, last name, phone, etc.).  
-
-- **`PATCH /api/v1/users/:id/promote`**  
-  Promote a user (by ID) to admin role.  
-  - Returns the updated user object on success.  
-
-- **`GET /api/v1/users/search`**  
-  Search for users by name or email (admin-only).
+**Invitation Flow** for new users with emails. See [Email Invitations](#email-invitations-sendgrid).
 
 ---
 
 ## S3 Image Upload (Dentist Photos)
 
-We use a **custom S3 uploader** for dentist photos—**not** Active Storage. The flow is:
-
-1. **Dentist Photo** is uploaded via `POST /api/v1/dentists/:id/upload_image` (admin-only).  
-2. We use an `S3Uploader` (in `app/services/s3_uploader.rb`) to:  
-   - Delete the old image if one exists  
-   - Upload the new file to S3  
-   - Store the resulting S3 URL in `dentists.image_url`  
-
-### AWS Credentials & Environment Variables
-
-Make sure you **set** the following in your `.env` or environment config:
-
-```bash
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_REGION=ap-southeast-2  # or whatever your region is
-S3_BUCKET_NAME=dentist-images
-```
-
-### Bucket Policy for Public Access
-
-Because our S3 bucket has **Object Ownership = Bucket owner enforced**, ACL-based public reads (like `acl: 'public-read'`) are **ignored**. To actually allow the images to be loaded publicly, add a **bucket policy** that grants `s3:GetObject` to everyone on all objects in the bucket:
-
-```jsonc
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "AllowPublicReadForGetObject",
-      "Effect": "Allow",
-      "Principal": "*",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::dentist-images/*"
-    }
-  ]
-}
-```
-
-**Important**:
-- Replace `dentist-images` with your actual bucket name.
-- Ensure “Block Public Access” is **off** at least for “Bucket policies.”  
-- With this policy, any uploaded images become publicly viewable at their S3 URL.
+We use a **custom S3 uploader** rather than Active Storage. For details, see [S3 Image Upload (Dentist Photos)](#s3-image-upload-dentist-photos) above.
 
 ---
 
 ## Email Invitations (SendGrid)
 
-We have added an **invitation** flow that leverages **SendGrid** to send emails when an admin creates a new user with an email address. The steps are:
+When an admin creates a new user with an email, the system can send them an “invitation” via SendGrid. For more details, see [Email Invitations (SendGrid)](#email-invitations-sendgrid) above.
 
-1. **Admin** calls `POST /api/v1/users` with `email`, `first_name`, `last_name` (and optionally `role`).  
-2. The server **generates** an `invitation_token` and sends a **SendGrid** email to the user.  
-3. The user **clicks** the invitation link, which leads to the front-end’s `finish-invitation` page (e.g., `GET /finish-invitation?token=...`).  
-4. The user picks a **new password**, and we call `PATCH /api/v1/invitations/finish` with the token & password.  
-5. The server **finalizes** the user (removing the invitation token, setting their password, optionally logging them in).  
+---
 
-### Environment Variables (SendGrid)
+## SMS Reminders (ClickSend)
 
-- **`SENDGRID_API_KEY`**: The key from your SendGrid account.  
-- **`SENDGRID_FROM_EMAIL`**: The verified sender address (e.g., `'no-reply@clinicdomain.com'`).  
+We’ve integrated **ClickSend** to automatically send appointment reminders via SMS. By default:
 
-In `config/environments/production.rb` (and possibly `development.rb`), we configure `ActionMailer` to use SendGrid:
+- Reminders are scheduled to go out at **8:00 AM the day before** an appointment, and **8:00 AM the day of** the appointment.  
+- A **cron job** (see next section) runs daily, checks for any pending reminders, and sends them via ClickSend.
 
-```ruby
-ActionMailer::Base.smtp_settings = {
-  user_name: 'apikey',
-  password: ENV['SENDGRID_API_KEY'],
-  domain: 'yourdomain.com',
-  address: 'smtp.sendgrid.net',
-  port: 587,
-  authentication: :plain,
-  enable_starttls_auto: true
-}
-```
+### Manually Running Reminders
 
-And in your `AdminUserMailer` (or similarly named mailer), ensure you use:
+If you need to trigger reminders manually:
 
-```ruby
-class AdminUserMailer < ApplicationMailer
-  default from: ENV['SENDGRID_FROM_EMAIL'] || 'YourDentalApp <no-reply@clinicdomain.com>'
+1. **Rails console** locally:
+   ```ruby
+   SendAppointmentRemindersJob.perform_now
+   ```
 
-  def invitation_email(user)
-    @user = user
-    @invitation_url = "http://your-frontend-url/finish-invitation?token=#{user.invitation_token}"
-    mail to: @user.email, subject: "Welcome to Our Dental Clinic! Please finish creating your account"
-  end
-end
-```
+2. **Render’s interactive shell**:
+   ```bash
+   bin/rails runner "SendAppointmentRemindersJob.perform_now"
+   ```
+
+This executes the job immediately.
 
 ---
 
 ## Environment Variables
 
-- **`RAILS_MASTER_KEY`**: Rails 7 uses `config/credentials.yml.enc`. Make sure you have a valid master key for decryption in production or any environment that requires your app’s secrets.  
-- **`DENTIST_APPOINTMENT_BACKEND_DATABASE_PASSWORD`**: If needed for your DB password.  
-- **`SECRET_KEY_BASE`**: Heroku or other hosting platforms set this automatically. If self-hosting, set it manually.  
-- **`AWS_ACCESS_KEY_ID`** / **`AWS_SECRET_ACCESS_KEY`** / **`AWS_REGION`** / **`S3_BUCKET_NAME`**: For uploading dentist images to Amazon S3.  
-- **`SENDGRID_API_KEY`**: Used for sending emails via SendGrid.  
-- **`SENDGRID_FROM_EMAIL`**: The “from” address for email invitations or notifications.
+- **`RAILS_MASTER_KEY`**: For decrypting `config/credentials.yml.enc`.  
+- **Database variables** (like `DATABASE_URL` or `PG*` from your hosting):  
+  - For connecting to your Render PostgreSQL instance.  
+- **ClickSend** credentials:  
+  - `CLICKSEND_USERNAME`  
+  - `CLICKSEND_API_KEY`  
+- **SendGrid** credentials:  
+  - `SENDGRID_API_KEY`  
+  - `SENDGRID_FROM_EMAIL`  
+
+You also need the usual `SECRET_KEY_BASE` or other standard Rails env vars depending on your hosting environment.
 
 ---
 
 ## Deployment
 
-Typical steps to deploy to a service like **Render**, **Heroku**, or a container-based platform:
-
-1. **Set environment variables** (like `RAILS_MASTER_KEY`, `AWS_ACCESS_KEY_ID`, `SENDGRID_API_KEY`, etc.) in your hosting environment or CI/CD build system.  
+1. **Set environment variables** in your hosting environment (Render, Heroku, etc.) so that Rails can connect to your DB, has the master key, etc.
 2. **Migrate** the database in the remote environment:
 
    ```bash
    bin/rails db:migrate
    ```
 
-3. **(If needed)** Precompile assets or rely on host’s build environment:
+3. **(If needed)** Precompile assets:
 
    ```bash
    SECRET_KEY_BASE_DUMMY=1 bin/rails assets:precompile
    ```
 
-4. **Start** the Puma server:
+4. **Start** Puma or another server:
 
    ```bash
    bin/rails server
    ```
 
-For Docker-based deployments, see any provided `Dockerfile` and `.dockerignore`.
+---
+
+## Hosting and Links
+
+- **Backend** is hosted on Render (Web Service):  
+  [Render Web Service Dashboard](https://dashboard.render.com/web/srv-ctqi5i5svqrc73coi1mg/settings)
+
+- **PostgreSQL Database** is on Render:  
+  [isa-dental-db on Render](https://dashboard.render.com/d/dpg-ctqi6elds78s73dd3t50-a)
+
+- **Cron Job** (for automated reminders) is on Render as well:  
+  [Cron job on Render](https://dashboard.render.com/cron/crn-cu07un9opnds738lpeb0/settings)
+
+- **Frontend** is hosted on Netlify:  
+  [isa-dental-appt Netlify Dashboard](https://app.netlify.com/sites/isa-dental-appt/overview)
 
 ---
 
 ## Future Enhancements / Next Steps
 
-- **Insurance Info**: The `User` model can store `provider_name`, `policy_number`, and `plan_type`. Optionally move to a separate `Insurance` model.  
-- **Recurring appointments** or advanced scheduling logic.  
-- **Payment Integration** (Stripe, PayPal, etc.).  
-- **SMS notifications** for reminders or confirmations.  
-- **Additional Admin Tools**: e.g., searching for “next available times” across all dentists or precomputing free slots for faster lookups.  
-- **Advanced admin reporting** (monthly appointment volume, no-show rates, etc.).  
-- **Extended user management**: Possibly allow demotion or user deactivation, plus more robust role or permission systems.
+- **Insurance Info**: Possibly move user insurance fields to a separate `Insurance` model.  
+- **Recurring Appointments**: Add advanced scheduling logic.  
+- **Payment Integration**: e.g. Stripe or PayPal.  
+- **More Admin Tools**: e.g. monthly reporting, next available time searches, etc.  
+- **Advanced user management**: Demotions, user deactivation, or additional roles.

@@ -58,7 +58,10 @@ Rails.application.routes.draw do
       resource :schedule, only: [:show, :update], controller: :schedules
 
       # Dentist Unavailabilities
-      resources :dentist_unavailabilities, only: [:create, :update, :destroy]
+      resources :dentist_unavailabilities, only: [:index, :create, :update, :destroy]
+
+      # Day-of-week ClinicDaySettings
+      resources :clinic_day_settings, only: [:index, :update]
     end
   end
 end
