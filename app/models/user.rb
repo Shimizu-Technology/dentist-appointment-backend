@@ -1,18 +1,26 @@
 # File: app/models/user.rb
+
 class User < ApplicationRecord
   has_secure_password validations: false
 
-  # Before validation => normalize email
   before_validation :normalize_email
 
-  has_many :dependents, dependent: :destroy
-  has_many :appointments
+  belongs_to :parent_user,
+             class_name: 'User',
+             optional: true
+
+  has_many :child_users,
+           class_name: 'User',
+           foreign_key: 'parent_user_id',
+           dependent: :nullify
+
+  has_many :appointments, dependent: :destroy
 
   validates :role, presence: true
 
-  # If NOT phone_only => email is required
-  validates :email, presence: true, unless: :phone_only?
-  # If they do provide an email, it must be unique (case-insensitive).
+  # If not phone_only and not is_dependent => require email
+  validates :email, presence: true, unless: -> { phone_only? || is_dependent }
+
   validates :email, uniqueness: { case_sensitive: false }, allow_blank: true
 
   validate :require_password_unless_phone_only
@@ -49,18 +57,22 @@ class User < ApplicationRecord
     role == 'phone_only'
   end
 
+  def dependent?
+    is_dependent
+  end
+
   private
 
   def normalize_email
-    # If email is present, strip + downcase
     self.email = email.to_s.strip.downcase if email.present?
-    # Convert blank to nil so the partial index sees it as truly "no email"
     self.email = nil if email.blank?
   end
 
   def require_password_unless_phone_only
-    return if phone_only?
-    if password_digest.blank? && invitation_token.blank?
+    return if phone_only? || is_dependent
+    return if invitation_token.present?
+
+    if password_digest.blank?
       errors.add(:password, "can't be blank for a non-phone-only user")
     end
   end

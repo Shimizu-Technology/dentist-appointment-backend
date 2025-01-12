@@ -10,7 +10,7 @@
         background-color: #f7fafc;
       }
       .header {
-        background-color: #2B6CB0; /* You can adjust to match your brand color */
+        background-color: #2B6CB0;
         text-align: center;
         padding: 20px;
         color: #ffffff;
@@ -32,21 +32,6 @@
       p {
         font-size: 15px; line-height: 1.6; color: #4a5568; margin-top: 0; margin-bottom: 16px;
       }
-      .btn {
-        display: inline-block;
-        margin: 20px 0 0;
-        padding: 12px 24px;
-        background: #2B6CB0;
-        color: #ffffff;
-        text-decoration: none;
-        border-radius: 4px;
-        font-weight: 600;
-        font-size: 15px;
-        transition: background 0.2s ease;
-      }
-      .btn:hover {
-        background: #1E40AF;
-      }
       .footer {
         text-align: center;
         margin-top: 24px;
@@ -58,7 +43,6 @@
 
   <body>
     <div class="header">
-      <!-- Optional: Add your logo image here -->
       <h1>ISA Dental</h1>
     </div>
 
@@ -66,19 +50,19 @@
       <h2 class="heading">Appointment Canceled</h2>
 
       <p>
-        Dear <%= @appointment.user&.first_name %>,
+        Dear <%= @appointment.user.first_name %>,
       </p>
 
       <p>
         This is to inform you that your appointment scheduled on
-        <%= @appointment.appointment_time&.in_time_zone&.strftime('%B %d, %Y at %I:%M %p') %>
+        <%= @appointment.appointment_time.in_time_zone.strftime('%B %d, %Y at %I:%M %p') %>
         has been canceled.
       </p>
 
-      <% if @appointment.dependent_id? %>
+      <% if @appointment.user.is_dependent? %>
         <p>
           The appointment for your dependent
-          (<%= @appointment.dependent&.first_name %> <%= @appointment.dependent&.last_name %>)
+          (<%= @appointment.user.first_name %> <%= @appointment.user.last_name %>)
           is no longer active.
         </p>
       <% end %>
@@ -87,14 +71,6 @@
         If this cancellation was unexpected, please contact us to reschedule
         at your earliest convenience. We appreciate your understanding.
       </p>
-
-      <!-- If you'd like to include a button linking them back to the site, uncomment below:
-      <p>
-        <a class="btn" href="<%= @appointment_url %>">
-          Manage Other Appointments
-        </a>
-      </p>
-      -->
 
       <div class="footer">
         &copy; <%= Time.now.year %> ISA Dental &mdash; All rights reserved.

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_01_11_030451) do
+ActiveRecord::Schema[7.2].define(version: 2025_01_11_071018) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -37,7 +37,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_11_030451) do
 
   create_table "appointments", force: :cascade do |t|
     t.bigint "user_id", null: false
-    t.bigint "dependent_id"
     t.bigint "dentist_id", null: false
     t.bigint "appointment_type_id", null: false
     t.datetime "appointment_time"
@@ -48,7 +47,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_11_030451) do
     t.boolean "checked_in", default: false, null: false
     t.index ["appointment_type_id"], name: "index_appointments_on_appointment_type_id"
     t.index ["dentist_id"], name: "index_appointments_on_dentist_id"
-    t.index ["dependent_id"], name: "index_appointments_on_dependent_id"
     t.index ["user_id"], name: "index_appointments_on_user_id"
   end
 
@@ -92,16 +90,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_11_030451) do
     t.index ["specialty_id"], name: "index_dentists_on_specialty_id"
   end
 
-  create_table "dependents", force: :cascade do |t|
-    t.bigint "user_id", null: false
-    t.string "first_name"
-    t.string "last_name"
-    t.date "date_of_birth"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["user_id"], name: "index_dependents_on_user_id"
-  end
-
   create_table "specialties", force: :cascade do |t|
     t.string "name"
     t.datetime "created_at", null: false
@@ -123,15 +111,18 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_11_030451) do
     t.boolean "force_password_reset", default: false, null: false
     t.string "invitation_token"
     t.datetime "invitation_sent_at"
+    t.boolean "is_dependent", default: false, null: false
+    t.bigint "parent_user_id"
+    t.date "date_of_birth"
     t.index ["email"], name: "index_users_on_email", unique: true, where: "(email IS NOT NULL)"
+    t.index ["parent_user_id"], name: "index_users_on_parent_user_id"
   end
 
   add_foreign_key "appointment_reminders", "appointments"
   add_foreign_key "appointments", "appointment_types"
   add_foreign_key "appointments", "dentists"
-  add_foreign_key "appointments", "dependents"
   add_foreign_key "appointments", "users"
   add_foreign_key "dentist_unavailabilities", "dentists"
   add_foreign_key "dentists", "specialties"
-  add_foreign_key "dependents", "users"
+  add_foreign_key "users", "users", column: "parent_user_id"
 end

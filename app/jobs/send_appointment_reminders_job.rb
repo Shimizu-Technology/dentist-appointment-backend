@@ -1,4 +1,4 @@
-# app/jobs/send_appointment_reminders_job.rb
+# File: app/jobs/send_appointment_reminders_job.rb
 
 class SendAppointmentRemindersJob < ApplicationJob
   queue_as :default
@@ -27,33 +27,36 @@ class SendAppointmentRemindersJob < ApplicationJob
     appointment = reminder.appointment
     user        = appointment.user
 
-    # If user has no phone number, skip
-    if user.phone.blank?
-      Rails.logger.warn("[SendAppointmentRemindersJob] Skipping reminder ID=#{reminder.id} - user #{user.id} has no phone on file.")
+    # If the user is dependent => use parent's phone instead
+    phone_number = if user.dependent? && user.parent_user.present?
+      user.parent_user.phone
+    else
+      user.phone
+    end
+
+    if phone_number.blank?
+      Rails.logger.warn("[SendAppointmentRemindersJob] Skipping reminder ID=#{reminder.id} - no valid phone on file (for user or parent).")
       return
     end
 
     # Create a user-friendly time string
     appt_time_str = appointment.appointment_time.strftime('%B %d at %I:%M %p')
-
-    # Build the SMS body
-    # Keep it simpler so that it does not contain a direct link that triggers "RESTRICTED_URL".
     message_body = <<~TEXT.squish
-      Hi #{user.first_name}, 
+      Hi #{user.first_name},
       this is a reminder from ISA Dental for your appointment on #{appt_time_str}.
       If you need to reschedule or cancel, please call us at (671) 646-7982
       or visit our website for more options.
     TEXT
 
-    Rails.logger.debug("[SendAppointmentRemindersJob] Attempting to send SMS to #{user.phone} (ReminderID=#{reminder.id}).")
+    Rails.logger.debug("[SendAppointmentRemindersJob] Attempting to send SMS to #{phone_number} (ReminderID=#{reminder.id}).")
 
     success = ClicksendClient.send_text_message(
-      to:   user.phone,
+      to:   phone_number,
       body: message_body
     )
 
     unless success
-      Rails.logger.error("[SendAppointmentRemindersJob] Failed to send ClickSend SMS to #{user.phone} (ReminderID=#{reminder.id}).")
+      Rails.logger.error("[SendAppointmentRemindersJob] Failed to send ClickSend SMS to #{phone_number} (ReminderID=#{reminder.id}).")
     end
   end
 end

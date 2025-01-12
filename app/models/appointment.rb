@@ -1,8 +1,8 @@
+# File: app/models/appointment.rb
 class Appointment < ApplicationRecord
   belongs_to :user
   belongs_to :dentist
   belongs_to :appointment_type
-  belongs_to :dependent, optional: true
 
   has_many :appointment_reminders, dependent: :destroy
 
@@ -31,8 +31,8 @@ class Appointment < ApplicationRecord
   def create_appointment_reminders
     local_appt = appointment_time.in_time_zone(Rails.configuration.time_zone)
 
-    day_of_8am = local_appt.change(hour: 8, min: 0, sec: 0)
-    day_before_8am = day_of_8am - 1.day
+    day_of_8am      = local_appt.change(hour: 8,  min: 0, sec: 0)
+    day_before_8am  = day_of_8am - 1.day
 
     AppointmentReminder.create!(appointment_id: id, send_at: day_of_8am.utc)
     AppointmentReminder.create!(appointment_id: id, send_at: day_before_8am.utc)
@@ -63,11 +63,10 @@ class Appointment < ApplicationRecord
   def within_clinic_hours
     wday = appointment_time.wday
     day_setting = ClinicDaySetting.find_by(day_of_week: wday)
-
     return if day_setting.nil? # if no record or is_open==false, it’s covered above.
 
-    open_parts  = day_setting.open_time.split(':').map(&:to_i)   # [9, 0], etc.
-    close_parts = day_setting.close_time.split(':').map(&:to_i)  # [17, 0], etc.
+    open_parts  = day_setting.open_time.split(':').map(&:to_i)
+    close_parts = day_setting.close_time.split(':').map(&:to_i)
 
     appt_local = appointment_time.in_time_zone(Rails.configuration.time_zone)
     date_str   = appt_local.strftime('%Y-%m-%d')

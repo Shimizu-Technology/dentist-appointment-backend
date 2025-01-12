@@ -6,12 +6,9 @@ puts "Seeding data..."
 
 # -------------------------------------------------------------------
 # 1) DAY-OF-WEEK CLINIC SETTINGS
-#    (Instead of the old single ClinicSetting row)
 # -------------------------------------------------------------------
 puts "Creating/Updating ClinicDaySettings for each day of the week..."
 (0..6).each do |wday|
-  # For example, let's say Monday–Friday are open 09:00–17:00
-  # Saturday is open 10:00–14:00, Sunday is closed.
   case wday
   when 0 # Sunday
     is_open        = false
@@ -103,7 +100,7 @@ end
 appointment_types = [cleaning_type, filling_type, checkup_type, whitening_type]
 
 # -------------------------------------------------------------------
-# 5) USERS (Admin + Regular)
+# 5) USERS (Admin + Regular + Phone-Only)
 # -------------------------------------------------------------------
 puts "Creating admin@example.com..."
 User.find_or_create_by!(email: "admin@example.com") do |u|
@@ -164,7 +161,6 @@ end
 puts "Creating 20 Phone-Only Users..."
 phone_only_users = []
 20.times do
-  # No email, no password => phone_only
   user = User.create!(
     role:       'phone_only',
     phone:      Faker::PhoneNumber.phone_number,
@@ -174,19 +170,27 @@ phone_only_users = []
   phone_only_users << user
 end
 
-# Merge them
 users += phone_only_users
 
 # -------------------------------------------------------------------
-# 6) DEPENDENTS
+# 6) CREATE CHILD USERS (DEPENDENTS) with NO phone/email
+#    (Approach #2: store real contact info only in parent’s record)
 # -------------------------------------------------------------------
-puts "Creating Dependents for each user..."
-users.each do |user|
-  rand(2..4).times do
-    user.dependents.create!(
-      first_name:    Faker::Name.first_name,
-      last_name:     user.last_name,
-      date_of_birth: Faker::Date.birthday(min_age: 1, max_age: 17)
+puts "Creating child (dependent) users for each regular user..."
+all_regular_users = users.select { |u| u.role == 'user' }  # omit phone_only or admin
+
+all_regular_users.each do |parent|
+  # Randomly create between 0..3 children
+  rand(0..3).times do
+    User.create!(
+      is_dependent:    true,
+      parent_user_id:  parent.id,
+      role:            'phone_only',  # ensures we skip email/password validations
+      phone:           nil,           # no direct phone; parent's phone is used
+      email:           nil,           # no direct email; parent's email is used
+      first_name:      Faker::Name.first_name,
+      last_name:       parent.last_name,
+      date_of_birth:   Faker::Date.birthday(min_age: 1, max_age: 17)
     )
   end
 end
@@ -236,18 +240,14 @@ puts "Creating random appointments..."
 PAST_STATUSES   = %w[completed cancelled].freeze
 FUTURE_STATUSES = %w[scheduled cancelled].freeze
 
-users_with_dependents = users.select { |u| u.dependents.any? }
+all_regular_users = User.where(role: 'user', is_dependent: false)
 
-# -------------------------------------------------------------------
-# Helper: pick a random date/time that’s open, skipping closed days,
-# with a safety limit so we don't recurse infinitely.
-# -------------------------------------------------------------------
 def random_appointment_time
-  max_tries   = 365
-  tries       = 0
-  in_future   = [true, false].sample
+  max_tries = 365
+  tries     = 0
+  in_future = [true, false].sample
   offset_days = rand(1..90)
-  base_date   = in_future ? Date.current + offset_days : Date.current - offset_days
+  base_date = in_future ? Date.current + offset_days : Date.current - offset_days
 
   loop do
     tries += 1
@@ -259,7 +259,7 @@ def random_appointment_time
       next
     end
 
-    # 2) Check day_of_week is open
+    # 2) Check if day_of_week is open
     ds = ClinicDaySetting.find_by(day_of_week: base_date.wday)
     if ds&.is_open
       open_h, open_m   = ds.open_time.split(':').map(&:to_i)
@@ -277,30 +277,35 @@ def random_appointment_time
       end
     end
 
-    # Shift one day forward/backward and try again
+    # If we can't find a valid slot, step forward/backward a day and retry
     base_date = in_future ? base_date + 1.day : base_date - 1.day
   end
 end
 
-users_with_dependents.each do |user|
-  rand(0..5).times do
+all_regular_users.each do |user|
+  # If you also create appointments for child users:
+  child_users_for_this_parent = User.where(parent_user_id: user.id, is_dependent: true)
+
+  rand(1..5).times do
     apt_time   = random_appointment_time
     is_future  = apt_time >= Time.current
     apt_status = is_future ? FUTURE_STATUSES.sample : PAST_STATUSES.sample
-    appt_type  = appointment_types.sample
+    appt_type  = AppointmentType.all.sample  # or any array you have
+
+    chosen_child = (child_users_for_this_parent.any? && rand(2).zero?) ? child_users_for_this_parent.sample : nil
 
     begin
       Appointment.create!(
-        user:             user,
-        dependent:        user.dependents.sample,
-        dentist:          dentists.sample,
-        appointment_type: appt_type,
+        user_id:          chosen_child&.id || user.id,   # maybe it’s for the child, maybe for the parent
+        dentist_id:       Dentist.all.sample.id,
+        appointment_type_id: appt_type.id,
         appointment_time: apt_time,
         status:           apt_status,
         notes:            Faker::Lorem.sentence(word_count: 6)
       )
     rescue ActiveRecord::RecordInvalid => e
       puts "  -> Skipping invalid appointment: #{e.message}"
+      # That’s all—this prevents seeds from crashing.
     end
   end
 end
@@ -310,9 +315,9 @@ puts "--------------------------------------------------"
 puts "Summary:"
 puts " - Dentists: #{Dentist.count}"
 puts " - Admin Users: #{User.where(role: 'admin').count}"
-puts " - Phone-Only Users: #{User.where(role: 'phone_only').count}"
-puts " - Regular Users: #{User.where(role: 'user').count}"
-puts " - Dependents: #{Dependent.count}"
+puts " - Phone-Only Users: #{User.where(role: 'phone_only', is_dependent: false).count}"
+puts " - Regular Users (non-dependent): #{User.where(role: 'user', is_dependent: false).count}"
+puts " - Child (dependent) Users: #{User.where(is_dependent: true).count}"
 puts " - AppointmentTypes: #{AppointmentType.count}"
 puts " - Appointments: #{Appointment.count}"
 puts " - DentistUnavailabilities: #{DentistUnavailability.count}"

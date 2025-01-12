@@ -1,11 +1,12 @@
 # File: config/routes.rb
+
 Rails.application.routes.draw do
   namespace :api do
     namespace :v1 do
       # Sessions / Auth
-      post '/login', to: 'sessions#create'
-      post '/signup', to: 'signups#create'
-      patch '/invitations/finish', to: 'invitations#finish'
+      post   '/login',               to: 'sessions#create'
+      post   '/signup',              to: 'signups#create'
+      patch  '/invitations/finish',  to: 'invitations#finish'
 
       # Appointments
       resources :appointments, only: [:index, :create, :show, :update, :destroy] do
@@ -19,9 +20,6 @@ Rails.application.routes.draw do
 
       # Appointment Reminders
       resources :appointment_reminders, only: [:index, :update]
-
-      # Dependents for the **current user** scenario
-      resources :dependents, only: [:index, :create, :update, :destroy]
 
       # Appointment Types
       resources :appointment_types
@@ -37,14 +35,11 @@ Rails.application.routes.draw do
       # Specialties
       resources :specialties
 
-      # Nested dependents for an admin controlling a specific user:
+      # Users (admin-only for these CRUD actions)
       resources :users, only: [:create, :index, :update, :destroy] do
-        # This route means => POST /api/v1/users/:user_id/dependents
-        resources :dependents, only: [:create, :update, :destroy], module: :users
-
         collection do
-          patch :current
-          get :search
+          patch :current   # user updating themselves
+          get  :search
         end
         member do
           patch :promote
@@ -54,7 +49,7 @@ Rails.application.routes.draw do
       # Closed Days
       resources :closed_days, only: [:index, :create, :destroy]
 
-      # Schedules => single resource
+      # Single resource for Schedules
       resource :schedule, only: [:show, :update], controller: :schedules
 
       # Dentist Unavailabilities
@@ -62,6 +57,16 @@ Rails.application.routes.draw do
 
       # Day-of-week ClinicDaySettings
       resources :clinic_day_settings, only: [:index, :update]
+
+      # Normal user routes for child users => /api/v1/users/my_children
+      namespace :users do
+        resources :my_children, only: [:index, :create, :update, :destroy]
+      end
+
+      # Admin routes for child users => /api/v1/admin/children
+      namespace :admin do
+        resources :children, only: [:index, :create, :update, :destroy]
+      end
     end
   end
 end

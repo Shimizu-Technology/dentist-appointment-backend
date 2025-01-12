@@ -11,7 +11,7 @@
         background-color: #f7fafc;
       }
       .header {
-        background-color: #2B6CB0; /* Slightly darker than #3182CE */
+        background-color: #2B6CB0;
         text-align: center;
         padding: 20px;
         color: #ffffff;
@@ -50,8 +50,8 @@
         display: inline-block;
         margin: 16px 0;
         padding: 12px 24px;
-        background: #2B6CB0;    /* Button background */
-        color: #ffffff !important;        /* White text by default */
+        background: #2B6CB0;
+        color: #ffffff !important;
         border-radius: 4px;
         text-decoration: none;
         font-weight: 600;
@@ -60,7 +60,7 @@
       }
       .btn:hover {
         background: #1E40AF;
-        color: #ffffff;        /* Keep text white on hover */
+        color: #ffffff;
       }
       .footer {
         text-align: center;
@@ -72,14 +72,13 @@
   </head>
   <body>
     <div class="header">
-      <!-- Optional: Add your logo here -->
       <h1>ISA Dental</h1>
     </div>
 
     <div class="email-wrapper">
       <h2 class="heading">Appointment Confirmation</h2>
 
-      <p>Dear <%= @appointment.user&.first_name %>,</p>
+      <p>Dear <%= @appointment.user.first_name %>,</p>
 
       <p>
         Thank you for scheduling your dental appointment! Here are the details:
@@ -87,7 +86,7 @@
 
       <ul>
         <li><strong>Date/Time:</strong>
-          <%= @appointment.appointment_time&.in_time_zone&.strftime('%B %d, %Y at %I:%M %p') %>
+          <%= @appointment.appointment_time.in_time_zone.strftime('%B %d, %Y at %I:%M %p') %>
         </li>
         <li><strong>Dentist:</strong>
           Dr. <%= @appointment.dentist&.first_name %> <%= @appointment.dentist&.last_name %>
@@ -98,11 +97,11 @@
         </li>
       </ul>
 
-      <% if @appointment.dependent_id? %>
+      <% if @appointment.user.is_dependent? %>
         <p>
           This appointment is for your dependent
-          (<%= @appointment.dependent&.first_name %> <%= @appointment.dependent&.last_name %>).
-          You will receive all communications on their behalf.
+          (<%= @appointment.user.first_name %> <%= @appointment.user.last_name %>).
+          The parent/guardian on file will receive communications on their behalf.
         </p>
       <% end %>
 

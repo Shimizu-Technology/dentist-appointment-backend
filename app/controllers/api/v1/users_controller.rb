@@ -1,14 +1,11 @@
 # File: app/controllers/api/v1/users_controller.rb
+
 module Api
   module V1
     class UsersController < BaseController
-      # Everything remains the same up top...
-      # We require admin for :index, :create, :update, :destroy, :promote, :search
-      # The only exception is patch /users/current => for the currently logged in user
-
-      # GET /api/v1/users (Admin-only, paginated)
+      # GET /api/v1/users => admin only
       def index
-        return not_admin unless current_user&.admin?
+        return not_admin unless current_user.admin?
 
         page     = (params[:page].presence || 1).to_i
         per_page = (params[:per_page].presence || 10).to_i
@@ -27,28 +24,26 @@ module Api
         }, status: :ok
       end
 
-      # POST /api/v1/users (Admin creation)
+      # POST /api/v1/users => admin create user
       def create
-        return not_admin unless current_user&.admin?
+        return not_admin unless current_user.admin?
         admin_create_user
       end
 
-      # PATCH /api/v1/users/current (for user updating their own info)
+      # PATCH /api/v1/users/current => user updating themselves
       def current
-        unless @current_user
-          return render json: { error: 'Unauthorized' }, status: :unauthorized
-        end
+        return render json: { error: 'Unauthorized' }, status: :unauthorized unless current_user
 
-        if @current_user.update(user_update_params)
-          render json: user_to_camel(@current_user), status: :ok
+        if current_user.update(user_update_params)
+          render json: user_to_camel(current_user), status: :ok
         else
-          render json: { errors: @current_user.errors.full_messages }, status: :unprocessable_entity
+          render json: { errors: current_user.errors.full_messages }, status: :unprocessable_entity
         end
       end
 
-      # PATCH /api/v1/users/:id/promote (Admin-only)
+      # PATCH /api/v1/users/:id/promote => admin only
       def promote
-        return not_admin unless current_user&.admin?
+        return not_admin unless current_user.admin?
 
         user = User.find(params[:id])
         if user.update(role: 'admin')
@@ -60,35 +55,25 @@ module Api
 
       # GET /api/v1/users/search?q=...
       def search
-        return not_admin unless current_user&.admin?
+        return not_admin unless current_user.admin?
 
-        query    = params[:q].to_s.strip.downcase
-        page     = (params[:page].presence || 1).to_i
+        query   = params[:q].to_s.strip.downcase
+        page    = (params[:page].presence || 1).to_i
         per_page = (params[:per_page].presence || 10).to_i
 
         if query.blank?
-          return render json: {
-            users: [],
-            meta: {
-              currentPage: 1,
-              totalPages:  1,
-              totalCount:  0,
-              perPage:     per_page
-            }
-          }, status: :ok
+          return render json: empty_pagination(per_page), status: :ok
         end
 
-        # Example for PostgreSQL: using (first_name || ' ' || last_name).
-        # If MySQL, use CONCAT(first_name, ' ', last_name).
-        base_scope = User.where("
-          LOWER(first_name) LIKE :s
-          OR LOWER(last_name) LIKE :s
-          OR LOWER(first_name || ' ' || last_name) LIKE :s
-          OR LOWER(email) LIKE :s
-        ", s: "%#{query}%").order(:id)
+        base_scope = User.where(
+          "LOWER(first_name) LIKE :s
+           OR LOWER(last_name) LIKE :s
+           OR LOWER(email) LIKE :s
+           OR LOWER(first_name || ' ' || last_name) LIKE :s",
+          s: "%#{query}%"
+        ).order(:id)
 
         @users = base_scope.page(page).per(per_page)
-
         render json: {
           users: @users.map { |u| user_to_camel(u) },
           meta: {
@@ -100,12 +85,11 @@ module Api
         }, status: :ok
       end
 
-      # PATCH /api/v1/users/:id (Admin-only)
+      # PATCH /api/v1/users/:id => admin only
       def update
-        return not_admin unless current_user&.admin?
+        return not_admin unless current_user.admin?
 
         user = User.find(params[:id])
-        # e.g. user_params_for_admin_update includes phone, email, first_name, last_name, role
         if user.update(user_params_for_admin_update)
           render json: user_to_camel(user), status: :ok
         else
@@ -113,9 +97,9 @@ module Api
         end
       end
 
-      # DELETE /api/v1/users/:id (Admin-only)
+      # DELETE /api/v1/users/:id => admin only
       def destroy
-        return not_admin unless current_user&.admin?
+        return not_admin unless current_user.admin?
 
         user = User.find(params[:id])
         user.destroy
@@ -124,18 +108,18 @@ module Api
 
       private
 
-      # ----------------------------------------------------------------
-      # 1) ADMIN CREATION (invitation-based)
-      # ----------------------------------------------------------------
+      # Called from POST /api/v1/users
       def admin_create_user
         user = User.new(user_params_for_admin_create)
         user.role ||= 'user'
 
+        # Possibly generate invitation if user is not phone_only and has an email
         if !user.phone_only? && user.email.present?
           user.generate_invitation_token!
         end
 
         if user.save
+          # If user has an email => send invitation
           if user.email.present? && !user.phone_only?
             AdminUserMailer.invitation_email(user).deliver_later
           end
@@ -147,33 +131,34 @@ module Api
         end
       end
 
-      # ----------------------------------------------------------------
-      # PERMITTED PARAMS
-      # ----------------------------------------------------------------
       def user_params_for_admin_create
         params.require(:user).permit(
           :email,
           :phone,
           :first_name,
           :last_name,
-          :role
+          :role,
+          :is_dependent,
+          :parent_user_id,
+          :date_of_birth
         )
       end
 
       def user_params_for_admin_update
-        # Admin can update these fields
         params.require(:user).permit(
           :email,
           :phone,
           :first_name,
           :last_name,
-          :role
-          # Add :password if you also want admins to set/force a new password
+          :role,
+          :is_dependent,
+          :parent_user_id,
+          :date_of_birth
         )
       end
 
-      # For patch /users/current
       def user_update_params
+        # For normal user updating themselves
         params.require(:user).permit(
           :first_name,
           :last_name,
@@ -181,30 +166,50 @@ module Api
           :email,
           :provider_name,
           :policy_number,
-          :plan_type
+          :plan_type,
+          :date_of_birth
+          # If you do NOT want them messing with is_dependent or parent_user_id,
+          # you can exclude them from this list
         )
       end
 
       def user_to_camel(u)
         {
-          id:                  u.id,
-          email:               u.email,
-          role:                u.role,
-          firstName:           u.first_name,
-          lastName:            u.last_name,
-          phone:               u.phone,
-          insuranceInfo: (u.provider_name ? {
-            providerName:   u.provider_name,
-            policyNumber:   u.policy_number,
-            planType:       u.plan_type
-          } : nil),
-          forcePasswordReset:  u.force_password_reset,
-          invitationToken:     u.invitation_token
+          id:              u.id,
+          email:           u.email,
+          role:            u.role,
+          firstName:       u.first_name,
+          lastName:        u.last_name,
+          phone:           u.phone,
+          isDependent:     u.is_dependent,
+          parentUserId:    u.parent_user_id,
+          dateOfBirth:     u.date_of_birth&.strftime('%Y-%m-%d'),
+          insuranceInfo: (
+            u.provider_name ? {
+              providerName: u.provider_name,
+              policyNumber: u.policy_number,
+              planType:     u.plan_type
+            } : nil
+          ),
+          forcePasswordReset: u.force_password_reset,
+          invitationToken:    u.invitation_token
         }
       end
 
       def not_admin
-        render json: { error: "Not authorized (admin only)" }, status: :forbidden
+        render json: { error: 'Not authorized (admin only)' }, status: :forbidden
+      end
+
+      def empty_pagination(per_page)
+        {
+          users: [],
+          meta: {
+            currentPage: 1,
+            totalPages: 1,
+            totalCount: 0,
+            perPage: per_page
+          }
+        }
       end
     end
   end
