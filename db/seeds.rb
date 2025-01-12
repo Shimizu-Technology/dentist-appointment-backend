@@ -173,23 +173,24 @@ end
 users += phone_only_users
 
 # -------------------------------------------------------------------
-# 6) CREATE CHILD USERS (DEPENDENTS) with NO phone/email
-#    (Approach #2: store real contact info only in parent’s record)
+# 6) CREATE CHILD USERS (DEPENDENTS)
+#    We skip email/password for them. They are typically phone_only.
+#    We’ll do so for both 'user' and 'admin' (some admins might have dependents).
 # -------------------------------------------------------------------
-puts "Creating child (dependent) users for each regular user..."
-all_regular_users = users.select { |u| u.role == 'user' }  # omit phone_only or admin
+puts "Creating child (dependent) users for each non-dependent user (role='user' or 'admin')..."
 
-all_regular_users.each do |parent|
-  # Randomly create between 0..3 children
+eligible_parents = User.where(is_dependent: false).where(role: %w[user admin])
+eligible_parents.each do |parent|
+  # Randomly create 0..3 dependents
   rand(0..3).times do
     User.create!(
       is_dependent:    true,
       parent_user_id:  parent.id,
-      role:            'phone_only',  # ensures we skip email/password validations
-      phone:           nil,           # no direct phone; parent's phone is used
-      email:           nil,           # no direct email; parent's email is used
+      role:            'phone_only',  # ensures no email/password validations
+      phone:           nil,           # child uses parent's phone
+      email:           nil,           # child uses parent's email
       first_name:      Faker::Name.first_name,
-      last_name:       parent.last_name,
+      last_name:       parent.last_name,  # match parent's last name
       date_of_birth:   Faker::Date.birthday(min_age: 1, max_age: 17)
     )
   end
@@ -240,8 +241,6 @@ puts "Creating random appointments..."
 PAST_STATUSES   = %w[completed cancelled].freeze
 FUTURE_STATUSES = %w[scheduled cancelled].freeze
 
-all_regular_users = User.where(role: 'user', is_dependent: false)
-
 def random_appointment_time
   max_tries = 365
   tries     = 0
@@ -253,13 +252,11 @@ def random_appointment_time
     tries += 1
     raise "Cannot find a valid open day/time after #{max_tries} tries." if tries > max_tries
 
-    # 1) Skip if globally closed
     if ClosedDay.exists?(date: base_date)
       base_date = in_future ? base_date + 1.day : base_date - 1.day
       next
     end
 
-    # 2) Check if day_of_week is open
     ds = ClinicDaySetting.find_by(day_of_week: base_date.wday)
     if ds&.is_open
       open_h, open_m   = ds.open_time.split(':').map(&:to_i)
@@ -277,26 +274,29 @@ def random_appointment_time
       end
     end
 
-    # If we can't find a valid slot, step forward/backward a day and retry
     base_date = in_future ? base_date + 1.day : base_date - 1.day
   end
 end
 
-all_regular_users.each do |user|
-  # If you also create appointments for child users:
-  child_users_for_this_parent = User.where(parent_user_id: user.id, is_dependent: true)
+all_regular_or_admin_parents = User.where(is_dependent: false).where(role: %w[user admin])
 
+all_regular_or_admin_parents.each do |parent|
+  # child users for this parent
+  child_users_for_this_parent = User.where(parent_user_id: parent.id, is_dependent: true)
+
+  # Create between 1..5 appointments (some in future, some in past)
   rand(1..5).times do
     apt_time   = random_appointment_time
     is_future  = apt_time >= Time.current
     apt_status = is_future ? FUTURE_STATUSES.sample : PAST_STATUSES.sample
-    appt_type  = AppointmentType.all.sample  # or any array you have
+    appt_type  = AppointmentType.all.sample
 
+    # Possibly schedule for the child
     chosen_child = (child_users_for_this_parent.any? && rand(2).zero?) ? child_users_for_this_parent.sample : nil
 
     begin
       Appointment.create!(
-        user_id:          chosen_child&.id || user.id,   # maybe it’s for the child, maybe for the parent
+        user_id:          chosen_child&.id || parent.id,
         dentist_id:       Dentist.all.sample.id,
         appointment_type_id: appt_type.id,
         appointment_time: apt_time,
@@ -305,7 +305,6 @@ all_regular_users.each do |user|
       )
     rescue ActiveRecord::RecordInvalid => e
       puts "  -> Skipping invalid appointment: #{e.message}"
-      # That’s all—this prevents seeds from crashing.
     end
   end
 end
@@ -313,13 +312,13 @@ end
 puts "Seeding complete!"
 puts "--------------------------------------------------"
 puts "Summary:"
-puts " - Dentists: #{Dentist.count}"
-puts " - Admin Users: #{User.where(role: 'admin').count}"
-puts " - Phone-Only Users: #{User.where(role: 'phone_only', is_dependent: false).count}"
-puts " - Regular Users (non-dependent): #{User.where(role: 'user', is_dependent: false).count}"
+puts " - Dentists:                #{Dentist.count}"
+puts " - Admin Users:             #{User.where(role: 'admin').count}"
+puts " - Phone-Only Users:        #{User.where(role: 'phone_only', is_dependent: false).count}"
+puts " - Regular (non-dependent): #{User.where(role: 'user', is_dependent: false).count}"
 puts " - Child (dependent) Users: #{User.where(is_dependent: true).count}"
-puts " - AppointmentTypes: #{AppointmentType.count}"
-puts " - Appointments: #{Appointment.count}"
+puts " - AppointmentTypes:        #{AppointmentType.count}"
+puts " - Appointments:            #{Appointment.count}"
 puts " - DentistUnavailabilities: #{DentistUnavailability.count}"
-puts " - Specialties: #{Specialty.count}"
-puts " - ClosedDays: #{ClosedDay.count}"
+puts " - Specialties:             #{Specialty.count}"
+puts " - ClosedDays:              #{ClosedDay.count}"
