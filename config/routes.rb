@@ -41,10 +41,12 @@ Rails.application.routes.draw do
         resources :my_children, only: [:index, :create, :update, :destroy]
       end
 
-      # Users (admin-only for full CRUD) plus a #show route
+      # Users (admin-only for full CRUD) plus custom :current and :search
       resources :users, only: [:create, :index, :show, :update, :destroy] do
         collection do
-          patch :current   # user updating themselves
+          # explicitly define GET and PATCH for "/users/current"
+          get  :current    # => users#current (GET)
+          patch :current   # => users#current (PATCH)
           get  :search
         end
         member do

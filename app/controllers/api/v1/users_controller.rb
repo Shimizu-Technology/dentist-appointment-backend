@@ -30,9 +30,7 @@ module Api
         admin_create_user
       end
 
-      #
       # GET /api/v1/users/:id => admin only
-      #
       def show
         return not_admin unless current_user.admin?
 
@@ -41,18 +39,36 @@ module Api
           return render json: { error: 'User not found' }, status: :not_found
         end
 
-        # Return the user object in same camel-case format as the rest
         render json: { user: user_to_camel(user) }, status: :ok
       end
 
-      # PATCH /api/v1/users/current => user updating themselves
+      # GET or PATCH /api/v1/users/current => normal user’s own data
+      #
+      #   GET   => return current_user’s data
+      #   PATCH => update current_user’s data
+      #
       def current
-        return render json: { error: 'Unauthorized' }, status: :unauthorized unless current_user
+        unless current_user
+          return render json: { error: 'Unauthorized' }, status: :unauthorized
+        end
 
-        if current_user.update(user_update_params)
-          render json: user_to_camel(current_user), status: :ok
+        if request.get?
+          # === GET => just show user
+          render json: { user: user_to_camel(current_user) }, status: :ok
+
+        elsif request.patch?
+          # === PATCH => update user
+          permitted_params = user_update_params
+
+          if current_user.update(permitted_params)
+            render json: user_to_camel(current_user), status: :ok
+          else
+            render json: { errors: current_user.errors.full_messages }, status: :unprocessable_entity
+          end
+
         else
-          render json: { errors: current_user.errors.full_messages }, status: :unprocessable_entity
+          # If some other method => respond 405
+          head :method_not_allowed
         end
       end
 
@@ -89,6 +105,7 @@ module Api
         ).order(:id)
 
         @users = base_scope.page(page).per(per_page)
+
         render json: {
           users: @users.map { |u| user_to_camel(u) },
           meta: {
@@ -121,37 +138,35 @@ module Api
         render json: { message: 'User deleted successfully' }, status: :ok
       end
 
+      # PATCH /api/v1/users/:id/resend_invitation => admin only
       def resend_invitation
         return not_admin unless current_user.admin?
 
         user = User.find(params[:id])
 
-        # If user has no email or is phone_only => no normal “email-based” invitation
         if user.phone_only? || user.email.blank?
           return render json: {
             error: 'User has no email or is phone-only. Cannot resend invitation.'
           }, status: :unprocessable_entity
         end
 
-        # Possibly check if they've already finished invitation:
+        # If user has already completed their invitation
         if user.invitation_token.blank? && user.force_password_reset == false
           return render json: {
             error: 'User has already completed their invitation.'
           }, status: :unprocessable_entity
         end
 
-        # Re-generate the token
         user.prepare_invitation_token
-        user.save!  # now we do the save explicitly
+        user.save!
 
-        # Re-send email
         AdminUserMailer.invitation_email(user).deliver_later
 
         render json: {
           message: "Invitation re-sent to #{user.email}",
           user: user_to_camel(user)
         }, status: :ok
-      end     
+      end
 
       private
 
@@ -160,7 +175,6 @@ module Api
         user = User.new(user_params_for_admin_create)
         user.role ||= 'user'
 
-        # Possibly generate invitation if user is not phone_only and has an email
         if !user.phone_only? && user.email.present?
           user.prepare_invitation_token
         end
@@ -204,8 +218,10 @@ module Api
         )
       end
 
+      #
+      # For normal user updating themselves (via PATCH /api/v1/users/current)
+      #
       def user_update_params
-        # For normal user updating themselves
         params.require(:user).permit(
           :first_name,
           :last_name,
@@ -228,14 +244,14 @@ module Api
           phone:           u.phone,
           isDependent:     u.is_dependent,
           parentUserId:    u.parent_user_id,
+          # Convert to "YYYY-MM-DD" if present
           dateOfBirth:     u.date_of_birth&.strftime('%Y-%m-%d'),
-          insuranceInfo: (
-            u.provider_name ? {
-              providerName: u.provider_name,
-              policyNumber: u.policy_number,
-              planType:     u.plan_type
-            } : nil
-          ),
+          insuranceInfo: (u.provider_name.present? ?
+            {
+              providerName:  u.provider_name,
+              policyNumber:  u.policy_number,
+              planType:      u.plan_type
+            } : nil),
           forcePasswordReset: u.force_password_reset,
           invitationToken:    u.invitation_token
         }
@@ -250,9 +266,9 @@ module Api
           users: [],
           meta: {
             currentPage: 1,
-            totalPages: 1,
-            totalCount: 0,
-            perPage: per_page
+            totalPages:  1,
+            totalCount:  0,
+            perPage:     per_page
           }
         }
       end
