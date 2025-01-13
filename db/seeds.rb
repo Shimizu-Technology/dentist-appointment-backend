@@ -100,6 +100,15 @@ end
 appointment_types = [cleaning_type, filling_type, checkup_type, whitening_type]
 
 # -------------------------------------------------------------------
+# Helper method to generate a valid “Guam” number that starts with +1671555, 
+# then 4 random digits. e.g. +16715551234
+# -------------------------------------------------------------------
+def guam_phone
+  random_4 = rand(1000..9999) # ensures 4 digits
+  "+1671555#{random_4}"
+end
+
+# -------------------------------------------------------------------
 # 5) USERS (Admin + Regular + Phone-Only)
 # -------------------------------------------------------------------
 puts "Creating admin@example.com..."
@@ -109,7 +118,7 @@ User.find_or_create_by!(email: "admin@example.com") do |u|
   u.provider_name = "Delta Dental"
   u.policy_number = "AAA111"
   u.plan_type     = "PPO"
-  u.phone         = "555-0001"
+  u.phone         = guam_phone
   u.first_name    = "Adminy"
   u.last_name     = "Example"
 end
@@ -121,7 +130,7 @@ User.find_or_create_by!(email: "user@example.com") do |u|
   u.provider_name = "Guardian"
   u.policy_number = "BBB222"
   u.plan_type     = "HMO"
-  u.phone         = "555-0002"
+  u.phone         = guam_phone
   u.first_name    = "Regular"
   u.last_name     = "User"
 end
@@ -134,8 +143,8 @@ puts "Creating 10 random Admin Users..."
     role:          "admin",
     provider_name: Faker::Company.name,
     policy_number: Faker::Alphanumeric.alpha(number: 5).upcase,
-    plan_type:     ["PPO", "HMO", "POS"].sample,
-    phone:         Faker::PhoneNumber.phone_number,
+    plan_type:     %w[PPO HMO POS].sample,
+    phone:         guam_phone,
     first_name:    Faker::Name.first_name,
     last_name:     Faker::Name.last_name
   )
@@ -150,8 +159,8 @@ users = []
     role:          "user",
     provider_name: Faker::Company.name,
     policy_number: Faker::Alphanumeric.alpha(number: 5).upcase,
-    plan_type:     ["PPO", "HMO", "POS"].sample,
-    phone:         Faker::PhoneNumber.phone_number,
+    plan_type:     %w[PPO HMO POS].sample,
+    phone:         guam_phone,
     first_name:    Faker::Name.first_name,
     last_name:     Faker::Name.last_name
   )
@@ -163,7 +172,7 @@ phone_only_users = []
 20.times do
   user = User.create!(
     role:       'phone_only',
-    phone:      Faker::PhoneNumber.phone_number,
+    phone:      guam_phone,
     first_name: Faker::Name.first_name,
     last_name:  Faker::Name.last_name
   )
@@ -175,7 +184,6 @@ users += phone_only_users
 # -------------------------------------------------------------------
 # 6) CREATE CHILD USERS (DEPENDENTS)
 #    We skip email/password for them. They are typically phone_only.
-#    We’ll do so for both 'user' and 'admin' (some admins might have dependents).
 # -------------------------------------------------------------------
 puts "Creating child (dependent) users for each non-dependent user (role='user' or 'admin')..."
 
@@ -186,9 +194,9 @@ eligible_parents.each do |parent|
     User.create!(
       is_dependent:    true,
       parent_user_id:  parent.id,
-      role:            'phone_only',  # ensures no email/password validations
-      phone:           nil,           # child uses parent's phone
-      email:           nil,           # child uses parent's email
+      role:            'phone_only',
+      phone:           nil,           # child might share parent's phone
+      email:           nil,           # child might share parent's email
       first_name:      Faker::Name.first_name,
       last_name:       parent.last_name,  # match parent's last name
       date_of_birth:   Faker::Date.birthday(min_age: 1, max_age: 17)
@@ -296,12 +304,12 @@ all_regular_or_admin_parents.each do |parent|
 
     begin
       Appointment.create!(
-        user_id:          chosen_child&.id || parent.id,
-        dentist_id:       Dentist.all.sample.id,
+        user_id:             chosen_child&.id || parent.id,
+        dentist_id:          Dentist.all.sample.id,
         appointment_type_id: appt_type.id,
-        appointment_time: apt_time,
-        status:           apt_status,
-        notes:            Faker::Lorem.sentence(word_count: 6)
+        appointment_time:    apt_time,
+        status:              apt_status,
+        notes:               Faker::Lorem.sentence(word_count: 6)
       )
     rescue ActiveRecord::RecordInvalid => e
       puts "  -> Skipping invalid appointment: #{e.message}"
