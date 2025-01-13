@@ -22,27 +22,36 @@ class User < ApplicationRecord
   validates :role, presence: true
 
   # If not phone_only and not is_dependent => require email
-  validates :email, presence: true, unless: -> { phone_only? || is_dependent }
-  validates :email, uniqueness: { case_sensitive: false }, allow_blank: true
+  validates :email,
+            presence: true,
+            unless: -> { phone_only? || is_dependent }
+
+  validates :email,
+            uniqueness: { case_sensitive: false },
+            allow_blank: true
 
   validate :require_password_unless_phone_only
 
-  # Called when we first create a new user invite
-  def generate_invitation_token!
-    # Skip if phone_only or no email
-    if email.present? && !phone_only?
-      self.invitation_token   = SecureRandom.urlsafe_base64(32)
-      self.invitation_sent_at = Time.current
-      # If no password is set yet, assign a temporary random password
-      if password_digest.blank?
-        self.password = SecureRandom.hex(8)
-        self.force_password_reset = true
-      end
-      save!
+  #
+  # Called when we first create or re-send a new user invite
+  #
+  def prepare_invitation_token
+    # Only proceed if we have an email and are NOT phone-only
+    return if email.blank? || phone_only?
+
+    self.invitation_token   = SecureRandom.urlsafe_base64(32)
+    self.invitation_sent_at = Time.current
+
+    # If no password is set yet => assign random password, so the user sets it later
+    if password_digest.blank?
+      self.password = SecureRandom.hex(8)
+      self.force_password_reset = true
     end
   end
 
-  # Called when user completes invitation
+  #
+  # Called when user finishes invitation
+  #
   def finish_invitation!(new_password)
     self.password             = new_password
     self.invitation_token     = nil

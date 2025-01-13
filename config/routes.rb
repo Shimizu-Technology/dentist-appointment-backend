@@ -35,8 +35,13 @@ Rails.application.routes.draw do
       # Specialties
       resources :specialties
 
-      # Users (admin-only for these CRUD actions)
-      # We add :show here so GET /users/:id is now valid
+      # NORMAL user routes for child users => /api/v1/users/my_children
+      # (IMPORTANT: define this BEFORE the main users resource)
+      namespace :users do
+        resources :my_children, only: [:index, :create, :update, :destroy]
+      end
+
+      # Users (admin-only for full CRUD) plus a #show route
       resources :users, only: [:create, :index, :show, :update, :destroy] do
         collection do
           patch :current   # user updating themselves
@@ -44,6 +49,7 @@ Rails.application.routes.draw do
         end
         member do
           patch :promote
+          patch :resend_invitation
         end
       end
 
@@ -58,11 +64,6 @@ Rails.application.routes.draw do
 
       # Day-of-week ClinicDaySettings
       resources :clinic_day_settings, only: [:index, :update]
-
-      # Normal user routes for child users => /api/v1/users/my_children
-      namespace :users do
-        resources :my_children, only: [:index, :create, :update, :destroy]
-      end
 
       # Admin routes for child users => /api/v1/admin/children
       namespace :admin do

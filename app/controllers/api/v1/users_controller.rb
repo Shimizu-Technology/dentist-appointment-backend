@@ -121,6 +121,38 @@ module Api
         render json: { message: 'User deleted successfully' }, status: :ok
       end
 
+      def resend_invitation
+        return not_admin unless current_user.admin?
+
+        user = User.find(params[:id])
+
+        # If user has no email or is phone_only => no normal “email-based” invitation
+        if user.phone_only? || user.email.blank?
+          return render json: {
+            error: 'User has no email or is phone-only. Cannot resend invitation.'
+          }, status: :unprocessable_entity
+        end
+
+        # Possibly check if they've already finished invitation:
+        if user.invitation_token.blank? && user.force_password_reset == false
+          return render json: {
+            error: 'User has already completed their invitation.'
+          }, status: :unprocessable_entity
+        end
+
+        # Re-generate the token
+        user.prepare_invitation_token
+        user.save!  # now we do the save explicitly
+
+        # Re-send email
+        AdminUserMailer.invitation_email(user).deliver_later
+
+        render json: {
+          message: "Invitation re-sent to #{user.email}",
+          user: user_to_camel(user)
+        }, status: :ok
+      end     
+
       private
 
       # Called from POST /api/v1/users
@@ -130,7 +162,7 @@ module Api
 
         # Possibly generate invitation if user is not phone_only and has an email
         if !user.phone_only? && user.email.present?
-          user.generate_invitation_token!
+          user.prepare_invitation_token
         end
 
         if user.save
