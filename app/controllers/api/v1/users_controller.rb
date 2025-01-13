@@ -30,6 +30,21 @@ module Api
         admin_create_user
       end
 
+      #
+      # GET /api/v1/users/:id => admin only
+      #
+      def show
+        return not_admin unless current_user.admin?
+
+        user = User.find_by(id: params[:id])
+        if user.nil?
+          return render json: { error: 'User not found' }, status: :not_found
+        end
+
+        # Return the user object in same camel-case format as the rest
+        render json: { user: user_to_camel(user) }, status: :ok
+      end
+
       # PATCH /api/v1/users/current => user updating themselves
       def current
         return render json: { error: 'Unauthorized' }, status: :unauthorized unless current_user
@@ -57,8 +72,8 @@ module Api
       def search
         return not_admin unless current_user.admin?
 
-        query   = params[:q].to_s.strip.downcase
-        page    = (params[:page].presence || 1).to_i
+        query    = params[:q].to_s.strip.downcase
+        page     = (params[:page].presence || 1).to_i
         per_page = (params[:per_page].presence || 10).to_i
 
         if query.blank?
@@ -168,8 +183,6 @@ module Api
           :policy_number,
           :plan_type,
           :date_of_birth
-          # If you do NOT want them messing with is_dependent or parent_user_id,
-          # you can exclude them from this list
         )
       end
 

@@ -36,7 +36,8 @@ Rails.application.routes.draw do
       resources :specialties
 
       # Users (admin-only for these CRUD actions)
-      resources :users, only: [:create, :index, :update, :destroy] do
+      # We add :show here so GET /users/:id is now valid
+      resources :users, only: [:create, :index, :show, :update, :destroy] do
         collection do
           patch :current   # user updating themselves
           get  :search
