@@ -1,9 +1,9 @@
 # File: app/models/user.rb
 
+require 'phonelib'
+
 class User < ApplicationRecord
   has_secure_password validations: false
-
-  before_validation :normalize_email
 
   belongs_to :parent_user,
              class_name: 'User',
@@ -16,11 +16,13 @@ class User < ApplicationRecord
 
   has_many :appointments, dependent: :destroy
 
+  before_validation :normalize_email
+  before_validation :normalize_phone
+
   validates :role, presence: true
 
   # If not phone_only and not is_dependent => require email
   validates :email, presence: true, unless: -> { phone_only? || is_dependent }
-
   validates :email, uniqueness: { case_sensitive: false }, allow_blank: true
 
   validate :require_password_unless_phone_only
@@ -28,7 +30,7 @@ class User < ApplicationRecord
   # Called when we first create a new user invite
   def generate_invitation_token!
     # Skip if phone_only or no email
-    if self.email.present? && !phone_only?
+    if email.present? && !phone_only?
       self.invitation_token   = SecureRandom.urlsafe_base64(32)
       self.invitation_sent_at = Time.current
       # If no password is set yet, assign a temporary random password
@@ -47,10 +49,10 @@ class User < ApplicationRecord
     self.invitation_sent_at   = nil
     self.force_password_reset = false
     save!
-  end  
+  end
 
   def admin?
-    role == "admin"
+    role == 'admin'
   end
 
   def phone_only?
@@ -66,6 +68,21 @@ class User < ApplicationRecord
   def normalize_email
     self.email = email.to_s.strip.downcase if email.present?
     self.email = nil if email.blank?
+  end
+
+  #
+  # Convert phone into E.164 format using Phonelib
+  #
+  def normalize_phone
+    return if phone.blank?  # skip if no phone
+    parsed = Phonelib.parse(phone)
+
+    if parsed.valid?
+      # Convert to E.164: e.g. +16715551234
+      self.phone = parsed.e164
+    else
+      errors.add(:phone, 'is invalid. Please use a full format like +1671...')
+    end
   end
 
   def require_password_unless_phone_only
