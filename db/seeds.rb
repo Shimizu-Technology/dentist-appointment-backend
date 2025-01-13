@@ -100,8 +100,8 @@ end
 appointment_types = [cleaning_type, filling_type, checkup_type, whitening_type]
 
 # -------------------------------------------------------------------
-# Helper method to generate a valid “Guam” number that starts with +1671555, 
-# then 4 random digits. e.g. +16715551234
+# Helper to generate a valid “Guam” phone number in E.164 format
+# Example: +16715551234
 # -------------------------------------------------------------------
 def guam_phone
   random_4 = rand(1000..9999) # ensures 4 digits
@@ -111,32 +111,35 @@ end
 # -------------------------------------------------------------------
 # 5) USERS (Admin + Regular + Phone-Only)
 # -------------------------------------------------------------------
-puts "Creating admin@example.com..."
+puts "Creating a known admin@example.com..."
 User.find_or_create_by!(email: "admin@example.com") do |u|
-  u.password      = "password"
-  u.role          = "admin"
-  u.provider_name = "Delta Dental"
-  u.policy_number = "AAA111"
-  u.plan_type     = "PPO"
-  u.phone         = guam_phone
-  u.first_name    = "Adminy"
-  u.last_name     = "Example"
+  u.password       = "password"
+  u.role           = "admin"
+  u.provider_name  = "Delta Dental"
+  u.policy_number  = "AAA111"
+  u.plan_type      = "PPO"
+  u.phone          = guam_phone
+  u.first_name     = "Adminy"
+  u.last_name      = "Example"
+  u.date_of_birth  = Faker::Date.birthday(min_age: 25, max_age: 70)
 end
 
-puts "Creating user@example.com..."
+puts "Creating a known user@example.com..."
 User.find_or_create_by!(email: "user@example.com") do |u|
-  u.password      = "password"
-  u.role          = "user"
-  u.provider_name = "Guardian"
-  u.policy_number = "BBB222"
-  u.plan_type     = "HMO"
-  u.phone         = guam_phone
-  u.first_name    = "Regular"
-  u.last_name     = "User"
+  u.password       = "password"
+  u.role           = "user"
+  u.provider_name  = "Guardian"
+  u.policy_number  = "BBB222"
+  u.plan_type      = "HMO"
+  u.phone          = guam_phone
+  u.first_name     = "Regular"
+  u.last_name      = "User"
+  u.date_of_birth  = Faker::Date.birthday(min_age: 18, max_age: 70)
 end
 
-puts "Creating 10 random Admin Users..."
-10.times do
+# Increase the scale here
+puts "Creating 30 random Admin Users..."
+30.times do
   User.create!(
     email:         Faker::Internet.unique.email,
     password:      "password",
@@ -146,13 +149,14 @@ puts "Creating 10 random Admin Users..."
     plan_type:     %w[PPO HMO POS].sample,
     phone:         guam_phone,
     first_name:    Faker::Name.first_name,
-    last_name:     Faker::Name.last_name
+    last_name:     Faker::Name.last_name,
+    date_of_birth: Faker::Date.birthday(min_age: 25, max_age: 70)
   )
 end
 
-puts "Creating 200 Random Regular Users..."
+puts "Creating 1000 Random Regular Users..."
 users = []
-200.times do
+1000.times do
   user = User.create!(
     email:         Faker::Internet.unique.email,
     password:      "password",
@@ -162,19 +166,21 @@ users = []
     plan_type:     %w[PPO HMO POS].sample,
     phone:         guam_phone,
     first_name:    Faker::Name.first_name,
-    last_name:     Faker::Name.last_name
+    last_name:     Faker::Name.last_name,
+    date_of_birth: Faker::Date.birthday(min_age: 18, max_age: 80)
   )
   users << user
 end
 
-puts "Creating 20 Phone-Only Users..."
+puts "Creating 100 Phone-Only Users..."
 phone_only_users = []
-20.times do
+100.times do
   user = User.create!(
-    role:       'phone_only',
-    phone:      guam_phone,
-    first_name: Faker::Name.first_name,
-    last_name:  Faker::Name.last_name
+    role:           'phone_only',
+    phone:          guam_phone,
+    first_name:     Faker::Name.first_name,
+    last_name:      Faker::Name.last_name,
+    date_of_birth:  Faker::Date.birthday(min_age: 1, max_age: 80)
   )
   phone_only_users << user
 end
@@ -183,22 +189,22 @@ users += phone_only_users
 
 # -------------------------------------------------------------------
 # 6) CREATE CHILD USERS (DEPENDENTS)
-#    We skip email/password for them. They are typically phone_only.
+#    Typically phone_only, no email/password, is_dependent=true.
 # -------------------------------------------------------------------
 puts "Creating child (dependent) users for each non-dependent user (role='user' or 'admin')..."
 
 eligible_parents = User.where(is_dependent: false).where(role: %w[user admin])
 eligible_parents.each do |parent|
-  # Randomly create 0..3 dependents
-  rand(0..3).times do
+  # Randomly create 0..4 dependents per parent
+  rand(0..4).times do
     User.create!(
       is_dependent:    true,
       parent_user_id:  parent.id,
       role:            'phone_only',
-      phone:           nil,           # child might share parent's phone
-      email:           nil,           # child might share parent's email
+      phone:           nil,           # child typically won't have a phone
+      email:           nil,           # child won't have email
       first_name:      Faker::Name.first_name,
-      last_name:       parent.last_name,  # match parent's last name
+      last_name:       parent.last_name,  # share parent's last name
       date_of_birth:   Faker::Date.birthday(min_age: 1, max_age: 17)
     )
   end
@@ -216,8 +222,9 @@ ClosedDay.create!(date: Date.current + 300, reason: "Holiday")
 # -------------------------------------------------------------------
 puts "Creating random dentist unavailabilities..."
 Dentist.all.each do |dentist|
-  2.times do
-    date_offset = rand(150..180)
+  # Increase the unavailabilities to more realistically cover the year
+  10.times do
+    date_offset = rand(150..365)
     date_obj    = Date.current + date_offset
 
     # skip if date is globally closed
@@ -228,9 +235,10 @@ Dentist.all.each do |dentist|
     ds = ClinicDaySetting.find_by(day_of_week: wday)
     next if ds.nil? || !ds.is_open
 
-    # 2-hour block
-    start_hr = [9, 10, 12, 13, 14].sample
-    end_hr   = start_hr + 2
+    # random block length from 2..3 hours
+    start_hr = [9, 10, 11, 12, 13, 14].sample
+    block_length = [2, 3].sample
+    end_hr = start_hr + block_length
 
     DentistUnavailability.create!(
       dentist_id: dentist.id,
@@ -253,7 +261,7 @@ def random_appointment_time
   max_tries = 365
   tries     = 0
   in_future = [true, false].sample
-  offset_days = rand(1..90)
+  offset_days = rand(1..100)  # up to 100 days in past/future
   base_date = in_future ? Date.current + offset_days : Date.current - offset_days
 
   loop do
@@ -286,21 +294,24 @@ def random_appointment_time
   end
 end
 
-all_regular_or_admin_parents = User.where(is_dependent: false).where(role: %w[user admin])
+# For performance reasons, we’ll gather all non-dependent parents in an array
+all_regular_or_admin_parents = User.where(is_dependent: false).where(role: %w[user admin]).to_a
+puts "Generating appointments for ~#{all_regular_or_admin_parents.size} parent users..."
 
 all_regular_or_admin_parents.each do |parent|
   # child users for this parent
   child_users_for_this_parent = User.where(parent_user_id: parent.id, is_dependent: true)
 
-  # Create between 1..5 appointments (some in future, some in past)
-  rand(1..5).times do
+  # We'll create 5..12 appointments per parent user for variety
+  rand(5..12).times do
     apt_time   = random_appointment_time
     is_future  = apt_time >= Time.current
     apt_status = is_future ? FUTURE_STATUSES.sample : PAST_STATUSES.sample
     appt_type  = AppointmentType.all.sample
 
-    # Possibly schedule for the child
-    chosen_child = (child_users_for_this_parent.any? && rand(2).zero?) ? child_users_for_this_parent.sample : nil
+    # Possibly schedule for a child ~ 30% of the time
+    schedule_for_child = rand < 0.3 && child_users_for_this_parent.any?
+    chosen_child = schedule_for_child ? child_users_for_this_parent.sample : nil
 
     begin
       Appointment.create!(
