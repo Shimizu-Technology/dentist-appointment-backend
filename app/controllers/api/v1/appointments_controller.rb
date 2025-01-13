@@ -43,6 +43,11 @@ module Api
             .where(user_id: [current_user.id] + my_child_ids)
         end
 
+        # >>> ADD: numeric dentist filter if `dentist_id` is present <<<
+        if params[:dentist_id].present?
+          base_scope = base_scope.where(dentist_id: params[:dentist_id])
+        end
+
         # Optional filters
         if params[:q].present?
           search = params[:q].strip.downcase
