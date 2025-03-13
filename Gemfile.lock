@@ -198,7 +198,7 @@ GEM
       ast (~> 2.4.1)
       racc
     pg (1.5.9)
-    phonelib (0.10.3)
+    phonelib (0.10.6)
     psych (5.2.2)
       date
       stringio
